@@ -1,0 +1,65 @@
+[package]
+name = "kernel"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["executor/fifo", "naive_fs"]
+fifo_executor = ["crossbeam-queue"]
+vga_text_mod = []
+
+[dependencies]
+spin = { version = "0.9", default-features = false, features = [
+    "lock_api",
+    "mutex",
+    "spin_mutex",
+    "rwlock",
+] }
+linked_list_allocator = "0.9"
+crossbeam-queue = { version = "0.3", optional = true, default-features = false, features = [
+    "alloc",
+] }
+bitflags = "1.2"
+bitmap = { path = "crates/bitmap" }
+lru = { path = "crates/lru" }
+hashbrown = "0.11"
+naive_fs = { path = "crates/naive_fs", optional = true }
+lock_api = { version = "0.4", features = ["nightly"] }
+pin-project = "1"
+futures-util = { version = "0.3", default-features = false, features = [
+    "alloc",
+] }
+sleeplock = { path = "crates/sleeplock" }
+future_ext = { path = "crates/future_ext" }
+# [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
+riscv = "0.6"
+virtio-drivers = { git = "https://github.com/xrs-os/virtio-drivers.git", branch = "master" }
+log = "0.4"
+mm = { path = "crates/mm" }
+executor = { path = "crates/executor", features = ["fifo"] }
+num_enum = { path = "crates/num_enum" }
+array-init = "2"
+xmas-elf = "0.8"
+device_tree = { git = "https://github.com/rcore-os/device_tree-rs" }
+volatile = "0.4"
+
+[dev-dependencies]
+# tokio-test = "0.4"
+
+[workspace]
+# See https://github.com/rust-lang/rfcs/blob/master/text/2957-cargo-features2.md
+resolver = "2"
+members = [
+    "crates/bitmap",
+    "crates/lru",
+    "crates/sleeplock",
+    "crates/naive_fs",
+    "crates/future_ext",
+    "crates/mm",
+    "crates/executor",
+    "crates/num_enum",
+    "crates/init_proc",
+    "mkfs",
+]
