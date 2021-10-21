@@ -388,7 +388,12 @@ impl Signal {
 
     /// Returns true if the signal should be actually delivered, otherwise
     /// it should be dropped.
-    fn prepare_signal(&self, sig: Signo, proc: &Arc<Proc>, proc_signal: &mut process::Signal) -> bool {
+    fn prepare_signal(
+        &self,
+        sig: Signo,
+        proc: &Arc<Proc>,
+        proc_signal: &mut process::Signal,
+    ) -> bool {
         if sig.kernel_stop() {
             // This is a stop signal.  Remove SIGCONT from all queues.
             let flush = SignalSet::sigmask(&Signo::SIGCONT);

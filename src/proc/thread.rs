@@ -201,7 +201,7 @@ impl<T> MaybeUnlock<T> {
     pub fn new(v: T) -> Self {
         Self(v)
     }
-    
+
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn assume_locked(&self) -> &mut T {
         #[allow(clippy::cast_ref_to_mut)]

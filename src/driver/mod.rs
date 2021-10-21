@@ -11,6 +11,7 @@ use alloc::{
 use crate::{fs::blk, spinlock::RwLockIrq};
 
 mod plic;
+mod uart;
 mod virtio_blk;
 mod virtio_mmio;
 
@@ -111,6 +112,7 @@ struct DtbHeader {
 
 pub fn init(dtb: usize) {
     plic::init();
+    uart::init();
     virtio_mmio::init();
 
     let header = unsafe { &*(dtb as *const DtbHeader) };

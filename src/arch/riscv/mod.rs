@@ -11,6 +11,10 @@ pub fn putchar(c: u8) {
     sbi::console_putchar(c as usize);
 }
 
+pub fn getchar() -> u8 {
+    sbi::console_getchar() as u8
+}
+
 pub fn cpu_id() -> usize {
     let id: usize;
     unsafe {

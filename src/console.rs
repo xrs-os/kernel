@@ -151,9 +151,9 @@ mod vga {
 #[cfg(not(feature = "vga_text_mode"))]
 mod nographic {
 
-    use core::{fmt, option::Option};
     use super::ColorCode;
     use crate::arch;
+    use core::{fmt, option::Option};
 
     static mut PRINTER: Option<spin::Mutex<fn(c: u8)>> = None;
 

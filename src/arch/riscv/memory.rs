@@ -35,6 +35,15 @@ pub const fn user_stack_size() -> usize {
 
 pub fn kernel_segments() -> Vec<Segment> {
     vec![
+        // mmio device segment, rw-
+        Segment {
+            addr_range: PageParamA::linear_phys_to_virt(consts::DEVICE_START_ADDRESS)
+                ..PageParamA::linear_phys_to_virt(consts::DEVICE_END_ADDRESS),
+            flags: PageParamA::flag_set_kernel(
+                PageParamA::FLAG_PTE_READABLE | PageParamA::FLAG_PTE_WRITEABLE,
+            ),
+            map_type: MapType::Linear,
+        },
         // .text segment, -x
         Segment {
             addr_range: VirtualAddress(text_start as usize)..VirtualAddress(rodata_start as usize),
