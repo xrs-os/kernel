@@ -270,6 +270,12 @@ pub trait DynFilesystem: Send + Sync {
         self: Arc<Self>,
         inode_id: usize,
     ) -> BoxFuture<'static, vfs::Result<Option<Arc<dyn DynInode>>>>;
+
+    /// Get the BlkDevice's block_size.
+    fn blk_size(&self) -> u32;
+
+    /// Get the BlkDevice's block count.
+    fn blk_count(&self) -> usize;
 }
 
 impl vfs::Filesystem for Arc<dyn DynFilesystem> {
@@ -303,6 +309,16 @@ impl vfs::Filesystem for Arc<dyn DynFilesystem> {
 
     fn load_inode(&self, inode_id: usize) -> Self::LoadInodeFut<'_> {
         DynFilesystem::load_inode(self.clone(), inode_id)
+    }
+
+    /// Get the BlkDevice's block_size.
+    fn blk_size(&self) -> u32 {
+        DynFilesystem::blk_size(self)
+    }
+
+    /// Get the BlkDevice's block count.
+    fn blk_count(&self) -> usize {
+        DynFilesystem::blk_count(self)
     }
 }
 
@@ -341,6 +357,16 @@ impl<T: vfs::Filesystem + 'static> DynFilesystem for T {
                 .await?
                 .map(|inode| Arc::new(inode) as Arc<dyn DynInode>))
         })
+    }
+
+    /// Get the BlkDevice's block_size.
+    fn blk_size(&self) -> u32 {
+        vfs::Filesystem::blk_size(&*self)
+    }
+
+    /// Get the BlkDevice's block count.
+    fn blk_count(&self) -> usize {
+        vfs::Filesystem::blk_count(&*self)
     }
 }
 
@@ -408,6 +434,16 @@ impl<InnerFs: vfs::Filesystem + 'static> DynFilesystem for MountFs<InnerFs> {
                 }) as Arc<dyn DynInode>
             }))
         })
+    }
+
+    /// Get the BlkDevice's block_size.
+    fn blk_size(&self) -> u32 {
+        self.inner.blk_size()
+    }
+
+    /// Get the BlkDevice's block count.
+    fn blk_count(&self) -> usize {
+        self.inner.blk_count()
     }
 }
 

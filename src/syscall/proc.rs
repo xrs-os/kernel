@@ -12,7 +12,7 @@ pub fn sys_fork(thread: &Arc<Thread>) -> Result {
     match thread.fork(thread.inner.read().fork()) {
         Ok(new_thread) => {
             let new_thread_id = *new_thread.id() as usize;
-            spawn(thread_future(Arc::new(new_thread))).ok_or(Error::TryAgain)?;
+            spawn(thread_future(Arc::new(new_thread))).ok_or(Error::EAGAIN)?;
             Ok(new_thread_id)
         }
         Err(e) => {
@@ -30,12 +30,12 @@ pub fn sys_exit(thread: &Arc<Thread>, status: isize) -> Result {
 impl From<proc::Error> for Error {
     fn from(proc_err: proc::Error) -> Self {
         match proc_err {
-            proc::Error::ThreadIdNotEnough => Error::Unknown,
+            proc::Error::ThreadIdNotEnough => Error::UNKNOWM,
             proc::Error::MemoryErr(mem_err) => match mem_err {
-                mm::Error::NoSpace => Error::OutOfMem,
-                _ => Error::Unknown,
+                mm::Error::NoSpace => Error::ENOMEM,
+                _ => Error::UNKNOWM,
             },
-            proc::Error::ElfErr(_e) => Error::NoExec,
+            proc::Error::ElfErr(_e) => Error::ENOEXEC,
         }
     }
 }

@@ -39,7 +39,7 @@ pub struct Proc {
     pub threads: RwLockIrq<BTreeMap<tid::RawThreadId, Arc<Thread>>>,
     cmd: String,
     // Current working directory
-    cwd: RwLockIrq<DirEntry>,
+    pub cwd: RwLockIrq<DirEntry>,
     open_files: OpenFiles,
     pub memory: RwLockIrq<Mem>,
     signal: MutexIrq<Signal>,
@@ -210,6 +210,10 @@ impl Proc {
                 t.waker().wake();
             });
         // TODO: Handling sub-processes
+    }
+
+    pub fn get_file(&self, fd: usize) -> Option<file::Descriptor> {
+        self.open_files.get_file(fd)
     }
 }
 

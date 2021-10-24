@@ -328,7 +328,7 @@ impl executor::Thread for ThreadFuture {
 }
 
 unsafe fn remove_future_lifetime<'a, T>(
-    f: Box<dyn Future<Output = T> + Send + Sync + 'a>,
+    f: Box<dyn Future<Output = T> + 'a>,
 ) -> Pin<Box<dyn Future<Output = T> + Send + Sync + 'static>> {
     Pin::new_unchecked(Box::from_raw(mem::transmute(Box::into_raw(f))))
 }

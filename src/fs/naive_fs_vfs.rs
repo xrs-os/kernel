@@ -99,6 +99,16 @@ where
     fn load_inode(&self, inode_id: vfs::InodeId) -> Self::LoadInodeFut<'_> {
         naive_fs::NaiveFs::load_inode(self, inode_id as naive_fs::InodeId).map_err(Into::into)
     }
+
+    /// Get the BlkDevice's block_size.
+    fn blk_size(&self) -> u32 {
+        naive_fs::NaiveFs::blk_size(self)
+    }
+
+    /// Get the BlkDevice's block count.
+    fn blk_count(&self) -> usize {
+        naive_fs::NaiveFs::blk_count(self)
+    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -109,17 +119,23 @@ where
     type FS = NaiveFs<DK>;
 
     type MetadataFut<'a> = Map<
-        sleeplock::RwLockReadFuture<
-            'a,
-            RwLockIrq<()>,
-            naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-        >,
-        fn(
-            sleeplock::RwLockReadGuard<
+        WithArg1<
+            sleeplock::RwLockReadFuture<
                 'a,
                 RwLockIrq<()>,
                 naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
             >,
+            Self::FS,
+        >,
+        fn(
+            (
+                sleeplock::RwLockReadGuard<
+                    'a,
+                    RwLockIrq<()>,
+                    naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
+                >,
+                Self::FS,
+            ),
         ) -> vfs::Result<vfs::Metadata>,
     >;
 
@@ -212,18 +228,23 @@ where
     }
 
     fn metadata(&self) -> Self::MetadataFut<'_> {
-        self.raw.read().map(|raw| {
-            Ok(vfs::Metadata {
-                mode: raw.mode.into(),
-                uid: raw.uid as u32,
-                gid: raw.gid as u32,
-                size: raw.size as u64,
-                atime: raw.atime.into(),
-                ctime: raw.ctime.into(),
-                mtime: raw.mtime.into(),
-                links_count: raw.links_count,
+        self.raw
+            .read()
+            .with_arg1(self.naive_fs().clone())
+            .map(|(raw, fs)| {
+                Ok(vfs::Metadata {
+                    mode: raw.mode.into(),
+                    uid: raw.uid as u32,
+                    gid: raw.gid as u32,
+                    size: raw.size as u64,
+                    atime: raw.atime.into(),
+                    ctime: raw.ctime.into(),
+                    mtime: raw.mtime.into(),
+                    links_count: raw.links_count,
+                    blk_size: fs.blk_size(),
+                    blk_count: fs.blk_count(),
+                })
             })
-        })
     }
 
     fn chown(&self, uid: u32, gid: u32) -> Self::ChownFut<'_> {

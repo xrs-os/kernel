@@ -43,7 +43,7 @@ pub struct Description {
 }
 
 pub struct Descriptor {
-    inode: fs::Inode,
+    pub inode: fs::Inode,
     description: RwLockIrq<Description>,
     cloexec: bool,
 }

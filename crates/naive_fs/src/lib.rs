@@ -284,4 +284,14 @@ where
     pub fn super_blk(&self) -> &SuperBlk<MutexType> {
         &self.super_blk
     }
+
+    /// Get the BlkDevice's block_size.
+    pub fn blk_size(&self) -> u32 {
+        self.blk_device.blk_size.size()
+    }
+
+    /// Get the BlkDevice's block count.
+    pub fn blk_count(&self) -> usize {
+        self.super_blk().raw_super_blk.blks_count as usize
+    }
 }

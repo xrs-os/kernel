@@ -63,6 +63,16 @@ impl<InnerFs: vfs::Filesystem + 'static> vfs::Filesystem for Filesystem<InnerFs>
             }))
         })
     }
+
+    /// Get the BlkDevice's block_size.
+    fn blk_size(&self) -> u32 {
+        self.inner.blk_size()
+    }
+
+    /// Get the BlkDevice's block count.
+    fn blk_count(&self) -> usize {
+        self.inner.blk_count()
+    }
 }
 
 pub struct CInode<InnerFs: vfs::Filesystem> {

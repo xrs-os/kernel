@@ -1,26 +1,42 @@
-use alloc::sync::Arc;
-
-// use self::proc::sys_fork;
 use crate::proc::thread::Thread;
+use alloc::sync::Arc;
+use core::{mem, ptr, slice};
 
-use self::proc::{sys_exit, sys_fork};
+mod fs;
 mod proc;
-
+use fs::{sys_fstat, sys_fstatat, sys_lstat, sys_stat, FStatAtFlags, Stat};
+use proc::{sys_exit, sys_fork};
 pub type Result = core::result::Result<usize, Error>;
 
 #[repr(u8)]
 #[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum Error {
-    /// Unknown
-    Unknown = 0,
-    /// Out of memory
-    OutOfMem = 1,
-    /// Try again
-    TryAgain = 2,
-    /// Function not implemented
-    NoSys = 3,
+    UNKNOWM = 0,
+    /// No such file or directory
+    ENOENT = 2,
+    /// I/O error
+    EIO = 5,
     /// Exec format error
-    NoExec = 4,
+    ENOEXEC = 8,
+    /// fd is not a valid file descriptor.
+    EBADF = 9,
+    /// Try again
+    EAGAIN = 11,
+    /// Out of memory
+    ENOMEM = 12,
+    /// File exists
+    EEXIST = 17,
+    /// Not a directory.
+    ENOTDIR = 20,
+    /// Invalid flag specified in flags.
+    EINVAL = 22,
+    /// No space left on device
+    ENOSPC = 28,
+    /// Read-only file system
+    EROFS = 30,
+    /// Function not implemented
+    ENOSYS = 38,
 }
 
 pub async fn syscall(thread: &Arc<Thread>) {
@@ -35,11 +51,64 @@ pub async fn syscall(thread: &Arc<Thread>) {
     let res = match syscall_num {
         1 => sys_fork(thread),
         2 => sys_exit(thread, syscall_args[0] as isize),
-        _ => Err(Error::NoSys),
+        3 => unsafe {
+            let path_ptr = syscall_args[0] as *const u8;
+            sys_fstatat(
+                thread,
+                syscall_args[0] as isize,
+                slice::from_raw_parts(path_ptr, c_str_len(path_ptr)),
+                mem::transmute::<_, &mut Stat>(syscall_args[2]),
+                mem::transmute::<_, FStatAtFlags>(syscall_args[3] as u32),
+            )
+            .await
+        },
+        4 => unsafe {
+            sys_fstat(
+                thread,
+                syscall_args[0] as isize,
+                mem::transmute::<_, &mut Stat>(syscall_args[2]),
+            )
+            .await
+        },
+        5 => unsafe {
+            let path_ptr = syscall_args[0] as *const u8;
+            sys_lstat(
+                thread,
+                slice::from_raw_parts(path_ptr, c_str_len(path_ptr)),
+                mem::transmute::<_, &mut Stat>(syscall_args[2]),
+            )
+            .await
+        },
+        6 => unsafe {
+            let path_ptr = syscall_args[0] as *const u8;
+            sys_stat(
+                thread,
+                slice::from_raw_parts(path_ptr, c_str_len(path_ptr)),
+                mem::transmute::<_, &mut Stat>(syscall_args[2]),
+            )
+            .await
+        },
+        _ => Err(Error::ENOSYS),
     };
 
     match res {
         Ok(ret) => thread.inner.write().context.set_syscall_ret(ret),
         Err(_) => todo!(),
+    }
+}
+
+unsafe fn c_str_len(mut str_ptr: *const u8) -> usize {
+    if str_ptr.is_null() {
+        0
+    } else {
+        let mut cnt = 0;
+        loop {
+            let c = ptr::read(str_ptr);
+            if c == 0 {
+                break cnt;
+            }
+            str_ptr = str_ptr.add(1);
+            cnt += 1;
+        }
     }
 }

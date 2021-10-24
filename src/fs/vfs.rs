@@ -11,7 +11,6 @@ pub type InodeId = usize;
 #[derive(Debug)]
 pub enum Error {
     NotDir,
-    NotSupported,
     NoRootDir,
     NoSuchFileOrDirectory,
     EntryExist,
@@ -300,6 +299,8 @@ pub struct Metadata {
     pub mtime: Timespec,
     /// how many times this particular inode is linked (referred to).
     pub links_count: u16,
+    pub blk_size: u32,
+    pub blk_count: usize,
 }
 
 impl Metadata {
@@ -365,6 +366,12 @@ pub trait Filesystem: Send + Sync {
     ) -> Self::CreateInodeFut<'_>;
 
     fn load_inode(&self, inode_id: InodeId) -> Self::LoadInodeFut<'_>;
+
+    /// Get the BlkDevice's block_size.
+    fn blk_size(&self) -> u32;
+
+    /// Get the BlkDevice's block count.
+    fn blk_count(&self) -> usize;
 }
 
 pub trait Inode: Send + Sync {

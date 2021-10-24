@@ -82,7 +82,9 @@ impl vfs::Filesystem for Arc<RamFs> {
                     atime: create_time.clone(),
                     ctime: create_time.clone(),
                     mtime: create_time,
-                    links_count: 0,
+                    links_count: 1,
+                    blk_size: self.blk_size(),
+                    blk_count: self.blk_count(),
                 },
                 content: if mode.is_dir() {
                     Content::Dir(Default::default())
@@ -100,6 +102,16 @@ impl vfs::Filesystem for Arc<RamFs> {
 
     fn load_inode(&self, inode_id: usize) -> Self::LoadInodeFut<'_> {
         future::ready(Ok(RamFs::load_inode(self, inode_id)))
+    }
+
+    /// Get the BlkDevice's block_size.
+    fn blk_size(&self) -> u32 {
+        0
+    }
+
+    /// Get the BlkDevice's block count.
+    fn blk_count(&self) -> usize {
+        0
     }
 }
 
