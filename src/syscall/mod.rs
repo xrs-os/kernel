@@ -4,8 +4,11 @@ use core::{mem, ptr, slice};
 
 mod fs;
 mod proc;
-use fs::{sys_fstat, sys_fstatat, sys_lstat, sys_stat, FStatAtFlags, Stat};
+mod syscall_table;
+
+use fs::{sys_fstat, sys_fstatat, sys_lseek, sys_read, sys_write, FStatAtFlags, LSeekWhence, Stat};
 use proc::{sys_exit, sys_fork};
+use syscall_table::*;
 pub type Result = core::result::Result<usize, Error>;
 
 #[repr(u8)]
@@ -49,10 +52,32 @@ pub async fn syscall(thread: &Arc<Thread>) {
     };
 
     let res = match syscall_num {
-        1 => sys_fork(thread),
-        2 => sys_exit(thread, syscall_args[0] as isize),
-        3 => unsafe {
-            let path_ptr = syscall_args[0] as *const u8;
+        SYS_LSEEK => match LSeekWhence::from_primitive(syscall_args[2] as u8) {
+            Some(whence) => {
+                sys_lseek(thread, syscall_args[0], syscall_args[1] as i64, whence).await
+            }
+            None => Err(Error::EINVAL),
+        },
+        SYS_READ => {
+            sys_read(
+                thread,
+                syscall_args[0],
+                syscall_args[1] as *mut u8,
+                syscall_args[2],
+            )
+            .await
+        }
+        SYS_WRITE => {
+            sys_write(
+                thread,
+                syscall_args[0],
+                syscall_args[1] as *const u8,
+                syscall_args[2],
+            )
+            .await
+        }
+        SYS_NEWFSTATAT => unsafe {
+            let path_ptr = syscall_args[1] as *const u8;
             sys_fstatat(
                 thread,
                 syscall_args[0] as isize,
@@ -62,32 +87,16 @@ pub async fn syscall(thread: &Arc<Thread>) {
             )
             .await
         },
-        4 => unsafe {
+        SYS_FSTAT => unsafe {
             sys_fstat(
                 thread,
                 syscall_args[0] as isize,
-                mem::transmute::<_, &mut Stat>(syscall_args[2]),
+                mem::transmute::<_, &mut Stat>(syscall_args[1]),
             )
             .await
         },
-        5 => unsafe {
-            let path_ptr = syscall_args[0] as *const u8;
-            sys_lstat(
-                thread,
-                slice::from_raw_parts(path_ptr, c_str_len(path_ptr)),
-                mem::transmute::<_, &mut Stat>(syscall_args[2]),
-            )
-            .await
-        },
-        6 => unsafe {
-            let path_ptr = syscall_args[0] as *const u8;
-            sys_stat(
-                thread,
-                slice::from_raw_parts(path_ptr, c_str_len(path_ptr)),
-                mem::transmute::<_, &mut Stat>(syscall_args[2]),
-            )
-            .await
-        },
+        SYS_EXIT => sys_exit(thread, syscall_args[0] as isize),
+        SYS_CLONE => sys_fork(thread),
         _ => Err(Error::ENOSYS),
     };
 

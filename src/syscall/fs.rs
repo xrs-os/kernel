@@ -1,9 +1,11 @@
+use core::slice;
+
 use alloc::sync::Arc;
 
 use super::{Error, Result};
 use crate::{
     fs::{vfs, FsStr},
-    proc::thread::Thread,
+    proc::{file::SeekFrom, thread::Thread},
     time::Timespec,
 };
 
@@ -50,22 +52,48 @@ bitflags! {
     }
 }
 
-pub async fn sys_fstat(thread: &Arc<Thread>, fd: isize, stat: &mut Stat) -> Result {
-    sys_fstatat(thread, fd, &[], stat, FStatAtFlags::empty()).await
+num_enum::num_enum! (
+    pub LSeekWhence:u8 {
+        // The file offset is set to offset bytes.
+        Set = 0,
+        // The file offset is set to its current location plus offset bytes.
+        Cur = 1,
+        // The file offset is set to the size of the file plus offset bytes.
+        End = 2,
+    }
+);
+
+pub async fn sys_lseek(
+    thread: &Arc<Thread>,
+    fd: usize,
+    offset: i64,
+    whence: LSeekWhence,
+) -> Result {
+    let mut descriptor = thread.proc().get_file(fd as usize).ok_or(Error::EBADF)?;
+    let seek_from = match whence {
+        LSeekWhence::Set => SeekFrom::Start(offset as u64),
+        LSeekWhence::Cur => SeekFrom::Current(offset),
+        LSeekWhence::End => SeekFrom::End(offset),
+    };
+    Ok(descriptor.seek(seek_from).await? as usize)
 }
 
-pub async fn sys_stat(thread: &Arc<Thread>, path: &[u8], stat: &mut Stat) -> Result {
-    sys_fstatat(thread, AT_FDCWD, path, stat, FStatAtFlags::empty()).await
+pub async fn sys_read(thread: &Arc<Thread>, fd: usize, buf: *mut u8, count: usize) -> Result {
+    let mut descriptor = thread.proc().get_file(fd as usize).ok_or(Error::EBADF)?;
+    let buf = unsafe { slice::from_raw_parts_mut(buf, count) };
+    let len = descriptor.read(buf).await?;
+    Ok(len)
 }
-pub async fn sys_lstat(thread: &Arc<Thread>, path: &[u8], stat: &mut Stat) -> Result {
-    sys_fstatat(
-        thread,
-        AT_FDCWD,
-        path,
-        stat,
-        FStatAtFlags::AT_SYMLINK_NOFOLLOW,
-    )
-    .await
+
+pub async fn sys_write(thread: &Arc<Thread>, fd: usize, buf: *const u8, count: usize) -> Result {
+    let mut descriptor = thread.proc().get_file(fd as usize).ok_or(Error::EBADF)?;
+    let buf = unsafe { slice::from_raw_parts(buf, count) };
+    let len = descriptor.write(buf).await?;
+    Ok(len)
+}
+
+pub async fn sys_fstat(thread: &Arc<Thread>, fd: isize, stat: &mut Stat) -> Result {
+    sys_fstatat(thread, fd, &[], stat, FStatAtFlags::empty()).await
 }
 
 pub async fn sys_fstatat(

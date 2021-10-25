@@ -1,5 +1,5 @@
 pub mod executor;
-mod file;
+pub mod file;
 pub mod process;
 pub mod signal;
 pub mod thread;
