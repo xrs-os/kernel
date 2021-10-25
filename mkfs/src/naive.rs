@@ -22,7 +22,7 @@ use tokio::fs::{File as TokioFile, OpenOptions as TokioOpenOptions};
 use uuid::Uuid;
 
 type NaiveFs = naive_fs::NaiveFs<spin::Mutex<()>, NaiveFsDisk>;
-type Inode = naive_fs::inode::Inode<spin::RwLock<()>, spin::Mutex<()>, NaiveFsDisk>;
+type Inode = naive_fs::inode::Inode<spin::Mutex<()>, NaiveFsDisk>;
 
 #[derive(Clap, Debug)]
 #[clap(setting = AppSettings::ColoredHelp)]
@@ -154,10 +154,7 @@ async fn main() {
         }
     };
 
-    let root_inode = match naivefs
-        .create_root::<spin::RwLock<()>>(now_unix_timestamp)
-        .await
-    {
+    let root_inode = match naivefs.create_root(now_unix_timestamp).await {
         Err(e) => {
             error!("Failed to create root directory. error: {:?}", e);
             return;

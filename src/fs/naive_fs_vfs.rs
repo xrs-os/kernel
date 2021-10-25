@@ -1,3 +1,5 @@
+use core::future::{ready, Ready};
+
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use future_ext::{WithArg1, WithArg1Ext, WithArg2, WithArg2Ext};
 use futures_util::{
@@ -6,11 +8,12 @@ use futures_util::{
 };
 use naive_fs::BoxFuture;
 
-use crate::spinlock::{MutexIrq, RwLockIrq};
+use crate::{sleeplock, spinlock::MutexIrq};
 
 use super::{
     blk::{self},
     disk::{self, Disk as FsDisk},
+    mount_fs::NotDynInode,
     vfs, DirEntryName,
 };
 
@@ -46,10 +49,10 @@ impl naive_fs::Disk for FsDisk {
     }
 }
 
-type NaiveFs<DK> = Arc<naive_fs::NaiveFs<MutexIrq<()>, DK>>;
-type NaiveFsInode<DK> = naive_fs::inode::Inode<RwLockIrq<()>, MutexIrq<()>, DK>;
+pub type NaiveFs<DK> = naive_fs::NaiveFs<MutexIrq<()>, DK>;
+type NaiveFsInode<DK> = naive_fs::inode::Inode<MutexIrq<()>, DK>;
 
-impl<DK> vfs::Filesystem for NaiveFs<DK>
+impl<DK> vfs::Filesystem for Arc<NaiveFs<DK>>
 where
     DK: naive_fs::Disk + Send + Sync + 'static,
 {
@@ -58,7 +61,7 @@ where
     type CreateInodeFut<'a> = BoxFuture<'a, vfs::Result<Self::Inode>>;
 
     type LoadInodeFut<'a> = MapErr<
-        naive_fs::inode::InodeLoadFut<'a, RwLockIrq<()>, MutexIrq<()>, DK>,
+        naive_fs::inode::InodeLoadFut<'a, MutexIrq<()>, DK>,
         fn(naive_fs::Error) -> vfs::Error,
     >;
 
@@ -111,29 +114,23 @@ where
     }
 }
 
+impl<DK> NotDynInode for NaiveFsInode<DK> where DK: naive_fs::Disk + Send + Sync + 'static {}
+
 #[allow(clippy::type_complexity)]
 impl<DK> vfs::Inode for NaiveFsInode<DK>
 where
     DK: naive_fs::Disk + Send + Sync + 'static,
 {
-    type FS = NaiveFs<DK>;
+    type FS = Arc<NaiveFs<DK>>;
 
     type MetadataFut<'a> = Map<
         WithArg1<
-            sleeplock::RwLockReadFuture<
-                'a,
-                RwLockIrq<()>,
-                naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-            >,
+            sleeplock::RwLockReadFuture<'a, naive_fs::MaybeDirty<naive_fs::inode::RawInode>>,
             Self::FS,
         >,
         fn(
             (
-                sleeplock::RwLockReadGuard<
-                    'a,
-                    RwLockIrq<()>,
-                    naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-                >,
+                sleeplock::RwLockReadGuard<'a, naive_fs::MaybeDirty<naive_fs::inode::RawInode>>,
                 Self::FS,
             ),
         ) -> vfs::Result<vfs::Metadata>,
@@ -141,21 +138,13 @@ where
 
     type ChownFut<'a> = Map<
         WithArg2<
-            sleeplock::RwLockWriteFuture<
-                'a,
-                RwLockIrq<()>,
-                naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-            >,
+            sleeplock::RwLockWriteFuture<'a, naive_fs::MaybeDirty<naive_fs::inode::RawInode>>,
             u32,
             u32,
         >,
         fn(
             (
-                sleeplock::RwLockWriteGuard<
-                    'a,
-                    RwLockIrq<()>,
-                    naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-                >,
+                sleeplock::RwLockWriteGuard<'a, naive_fs::MaybeDirty<naive_fs::inode::RawInode>>,
                 u32,
                 u32,
             ),
@@ -164,20 +153,12 @@ where
 
     type ChmodFut<'a> = Map<
         WithArg1<
-            sleeplock::RwLockWriteFuture<
-                'a,
-                RwLockIrq<()>,
-                naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-            >,
+            sleeplock::RwLockWriteFuture<'a, naive_fs::MaybeDirty<naive_fs::inode::RawInode>>,
             vfs::Mode,
         >,
         fn(
             (
-                sleeplock::RwLockWriteGuard<
-                    'a,
-                    RwLockIrq<()>,
-                    naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-                >,
+                sleeplock::RwLockWriteGuard<'a, naive_fs::MaybeDirty<naive_fs::inode::RawInode>>,
                 vfs::Mode,
             ),
         ) -> vfs::Result<()>,
@@ -185,43 +166,25 @@ where
 
     type LinkFut<'a> = Map<
         Map<
-            sleeplock::RwLockWriteFuture<
-                'a,
-                RwLockIrq<()>,
-                naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-            >,
-            fn(
-                sleeplock::RwLockWriteGuard<
-                    RwLockIrq<()>,
-                    naive_fs::MaybeDirty<naive_fs::inode::RawInode>,
-                >,
-            ),
+            sleeplock::RwLockWriteFuture<'a, naive_fs::MaybeDirty<naive_fs::inode::RawInode>>,
+            fn(sleeplock::RwLockWriteGuard<naive_fs::MaybeDirty<naive_fs::inode::RawInode>>),
         >,
         fn(()) -> vfs::Result<()>,
     >;
 
     type UnlinkFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type ReadAtFut<'a> = BoxFuture<'a, vfs::Result<usize>>;
-
     type WriteAtFut<'a> = BoxFuture<'a, vfs::Result<usize>>;
-
     type SyncFut<'a> =
         MapErr<BoxFuture<'a, naive_fs::Result<()>>, fn(naive_fs::Error) -> vfs::Error>;
-
     type AppendDotFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type LookupRawFut<'a> = BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>>;
-
     type LookupFut<'a> = BoxFuture<'a, vfs::Result<Option<vfs::DirEntry<Self::FS>>>>;
-
     type AppendFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type RemoveFut<'a> = BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>>;
-
     type LsRawFut<'a> = BoxFuture<'a, vfs::Result<Vec<vfs::RawDirEntry>>>;
-
     type LsFut<'a> = BoxFuture<'a, vfs::Result<Vec<vfs::DirEntry<Self::FS>>>>;
+    type IOCtlFut<'a> = Ready<vfs::Result<()>>;
 
     fn id(&self) -> vfs::InodeId {
         self.inode_id as vfs::InodeId
@@ -370,6 +333,10 @@ where
                 })
                 .map_err(Into::into)
         })
+    }
+
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Self::IOCtlFut<'_> {
+        ready(Err(vfs::Error::Unsupport))
     }
 }
 

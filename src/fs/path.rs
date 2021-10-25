@@ -4,6 +4,7 @@ use super::FsStr;
 #[derive(Debug, PartialEq, Eq)]
 pub struct Path(FsStr);
 
+#[allow(dead_code)]
 impl Path {
     pub fn from_bytes(bytes: &[u8]) -> &Self {
         unsafe { &*(bytes as *const [u8] as *const Self) }

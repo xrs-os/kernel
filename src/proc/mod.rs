@@ -1,5 +1,6 @@
 pub mod executor;
 pub mod file;
+pub mod pid;
 pub mod process;
 pub mod signal;
 pub mod thread;

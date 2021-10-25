@@ -154,6 +154,7 @@ impl From<vfs::Error> for Error {
             vfs::Error::UnsupportedFs(_) => Error::ENOSYS,
             vfs::Error::InvalidSeekOffset => Error::EINVAL,
             vfs::Error::Unsupport => Error::ENOSYS,
+            vfs::Error::NoSuchProcess(_) => Error::ESRCH,
         }
     }
 }

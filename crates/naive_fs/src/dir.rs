@@ -53,9 +53,8 @@ impl RawDirEntry {
     }
 }
 
-impl<RwLockType, MutexType, DK> Inode<RwLockType, MutexType, DK>
+impl<MutexType, DK> Inode<MutexType, DK>
 where
-    RwLockType: lock_api::RawRwLock,
     MutexType: lock_api::RawMutex,
     DK: Disk + Sync,
 {

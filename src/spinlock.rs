@@ -82,6 +82,7 @@ pub struct RwLockIrq<T: ?Sized>(spin::RwLock<T>);
 unsafe impl<T: ?Sized + Send> Send for RwLockIrq<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for RwLockIrq<T> {}
 
+#[allow(dead_code)]
 impl<T> RwLockIrq<T> {
     pub const fn new(value: T) -> Self {
         Self(spin::RwLock::new(value))

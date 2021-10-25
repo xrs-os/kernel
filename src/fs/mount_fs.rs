@@ -1,14 +1,21 @@
-use core::{any::Any, future::Future, pin::Pin};
+use core::any::Any;
 
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
-use futures_util::TryFutureExt;
+use futures_util::{future::BoxFuture, TryFutureExt};
 use hashbrown::HashMap;
 
 use crate::{fs, spinlock::RwLockIrq, time::Timespec};
 
 use super::vfs;
 
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub async fn mount(mountpoint: Arc<dyn DynInode>, fs: Arc<dyn DynFilesystem>) -> vfs::Result<()> {
+    let minode = mountpoint
+        .as_any_ref()
+        .downcast_ref::<MInode<Arc<dyn DynFilesystem>>>()
+        .ok_or(vfs::Error::Unsupport)?;
+    minode.mount(fs);
+    Ok(())
+}
 
 pub trait DynInode: Send + Sync {
     fn id(&self) -> usize;
@@ -58,6 +65,8 @@ pub trait DynInode: Send + Sync {
 
     fn ls(&self) -> BoxFuture<'_, vfs::Result<Vec<vfs::DirEntry<Arc<dyn DynFilesystem>>>>>;
 
+    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<'_, vfs::Result<()>>;
+
     fn as_any_ref(&self) -> &dyn Any;
 }
 
@@ -65,34 +74,21 @@ impl vfs::Inode for Arc<dyn DynInode> {
     type FS = Arc<dyn DynFilesystem>;
 
     type MetadataFut<'a> = BoxFuture<'a, vfs::Result<vfs::Metadata>>;
-
     type ChownFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type ChmodFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type LinkFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type UnlinkFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type ReadAtFut<'a> = BoxFuture<'a, vfs::Result<usize>>;
-
     type WriteAtFut<'a> = BoxFuture<'a, vfs::Result<usize>>;
-
     type SyncFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type AppendDotFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type LookupRawFut<'a> = BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>>;
-
     type LookupFut<'a> = BoxFuture<'a, vfs::Result<Option<vfs::DirEntry<Self::FS>>>>;
-
     type AppendFut<'a> = BoxFuture<'a, vfs::Result<()>>;
-
     type RemoveFut<'a> = BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>>;
-
     type LsRawFut<'a> = BoxFuture<'a, vfs::Result<Vec<vfs::RawDirEntry>>>;
-
     type LsFut<'a> = BoxFuture<'a, vfs::Result<Vec<vfs::DirEntry<Self::FS>>>>;
+    type IOCtlFut<'a> = BoxFuture<'a, vfs::Result<()>>;
 
     fn id(&self) -> usize {
         (**self).id()
@@ -162,9 +158,16 @@ impl vfs::Inode for Arc<dyn DynInode> {
     fn ls(&self) -> Self::LsFut<'_> {
         (**self).ls()
     }
+
+    fn ioctl(&self, cmd: u32, arg: usize) -> Self::IOCtlFut<'_> {
+        (**self).ioctl(cmd, arg)
+    }
 }
 
-impl<T: vfs::Inode + 'static> DynInode for T {
+/// NotDynInode maker trait
+pub trait NotDynInode {}
+
+impl<T: vfs::Inode + NotDynInode + 'static> DynInode for T {
     fn id(&self) -> usize {
         vfs::Inode::id(self)
     }
@@ -248,6 +251,10 @@ impl<T: vfs::Inode + 'static> DynInode for T {
         unreachable!()
     }
 
+    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<'_, vfs::Result<()>> {
+        Box::pin(vfs::Inode::ioctl(self, cmd, arg))
+    }
+
     fn as_any_ref(&self) -> &dyn Any {
         self
     }
@@ -313,16 +320,19 @@ impl vfs::Filesystem for Arc<dyn DynFilesystem> {
 
     /// Get the BlkDevice's block_size.
     fn blk_size(&self) -> u32 {
-        DynFilesystem::blk_size(self)
+        DynFilesystem::blk_size(&**self)
     }
 
     /// Get the BlkDevice's block count.
     fn blk_count(&self) -> usize {
-        DynFilesystem::blk_count(self)
+        DynFilesystem::blk_count(&**self)
     }
 }
 
-impl<T: vfs::Filesystem + 'static> DynFilesystem for T {
+impl<T: vfs::Filesystem + 'static> DynFilesystem for T
+where
+    <T as vfs::Filesystem>::Inode: NotDynInode,
+{
     fn root_dir_entry_raw(&self) -> vfs::RawDirEntry {
         vfs::Filesystem::root_dir_entry_raw(self)
     }
@@ -381,13 +391,6 @@ impl<FS: vfs::Filesystem> MountFs<FS> {
             inner,
             mountpoints: RwLockIrq::new(HashMap::new()),
         }
-    }
-
-    async fn load_inode(self: &Arc<Self>, inode_id: usize) -> vfs::Result<Option<MInode<FS>>> {
-        Ok(self.inner.load_inode(inode_id).await?.map(|inner| MInode {
-            mfs: self.clone(),
-            inner,
-        }))
     }
 
     fn get_mountpoint(&self, inode_id: vfs::InodeId) -> Option<Arc<dyn DynFilesystem>> {
@@ -450,6 +453,15 @@ impl<InnerFs: vfs::Filesystem + 'static> DynFilesystem for MountFs<InnerFs> {
 pub struct MInode<InnerFs: vfs::Filesystem> {
     mfs: Arc<MountFs<InnerFs>>,
     inner: InnerFs::Inode,
+}
+
+impl<InnerFs: vfs::Filesystem> MInode<InnerFs> {
+    pub fn mount(&self, fs: Arc<dyn DynFilesystem>) {
+        self.mfs
+            .mountpoints
+            .write()
+            .insert(vfs::Inode::id(&self.inner), fs);
+    }
 }
 
 impl<InnerFs: vfs::Filesystem + 'static> DynInode for MInode<InnerFs> {
@@ -567,6 +579,10 @@ impl<InnerFs: vfs::Filesystem + 'static> DynInode for MInode<InnerFs> {
                     .collect()
             }),
         )
+    }
+
+    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<'_, vfs::Result<()>> {
+        Box::pin(vfs::Inode::ioctl(&self.inner, cmd, arg))
     }
 
     fn as_any_ref(&self) -> &dyn Any {

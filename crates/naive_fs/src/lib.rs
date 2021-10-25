@@ -207,32 +207,32 @@ where
         }
     }
 
-    pub async fn create_inode<RwLockType: lock_api::RawRwLock>(
+    pub async fn create_inode(
         self: &Arc<Self>,
         mode: inode::Mode,
         uid: u16,
         gid: u16,
         create_unix_timestamp: u32,
-    ) -> Result<Inode<RwLockType, MutexType, DK>> {
+    ) -> Result<Inode<MutexType, DK>> {
         let inode_id = self.super_blk.alloc_inode().await.ok_or(Error::NoSpace)?;
-        self.create_inode_inner::<RwLockType>(inode_id, mode, uid, gid, create_unix_timestamp)
+        self.create_inode_inner(inode_id, mode, uid, gid, create_unix_timestamp)
             .await
     }
 
     #[allow(clippy::needless_lifetimes)]
-    pub fn load_inode<'a, RwLockType: lock_api::RawRwLock>(
+    pub fn load_inode<'a>(
         self: &'a Arc<Self>,
         inode_id: InodeId,
-    ) -> InodeLoadFut<'a, RwLockType, MutexType, DK> {
+    ) -> InodeLoadFut<'a, MutexType, DK> {
         Inode::load(inode_id, self)
     }
 
-    pub async fn create_root<RwLockType: lock_api::RawRwLock>(
+    pub async fn create_root(
         self: &Arc<Self>,
         create_unix_timestamp: u32,
-    ) -> Result<Inode<RwLockType, MutexType, DK>> {
+    ) -> Result<Inode<MutexType, DK>> {
         let inode = self
-            .create_inode_inner::<RwLockType>(
+            .create_inode_inner(
                 root_inode_id(),
                 inode::Mode::TY_DIR
                     | inode::Mode::PERM_RWX_USR
@@ -247,14 +247,14 @@ where
         Ok(inode)
     }
 
-    async fn create_inode_inner<RwLockType: lock_api::RawRwLock>(
+    async fn create_inode_inner(
         self: &Arc<Self>,
         inode_id: u16,
         mode: inode::Mode,
         uid: u16,
         gid: u16,
         create_unix_timestamp: u32,
-    ) -> Result<Inode<RwLockType, MutexType, DK>> {
+    ) -> Result<Inode<MutexType, DK>> {
         let mut prealloc_blks = if mode.contains(inode::Mode::TY_REG) {
             self.super_blk.raw_super_blk.prealloc_blocks
         } else if mode.contains(inode::Mode::TY_DIR) {

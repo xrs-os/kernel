@@ -12,7 +12,7 @@ use futures_util::pin_mut;
 
 use crate::{arch::interrupt, spinlock::MutexIrq};
 
-use super::thread::ThreadFuture;
+use super::thread::{Thread, ThreadFuture};
 
 static mut GLOBAL_EXECUTOR: MaybeUninit<FIFOExecutor<MutexIrq<()>, ThreadFuture>> =
     MaybeUninit::uninit();
@@ -41,8 +41,13 @@ pub fn run_ready_tasks() {
     executor().run_ready_tasks()
 }
 
-pub fn waker(tid: &<ThreadFuture as executor::Thread>::ID) -> Waker {
+pub fn waker(tid: &<ThreadFuture as executor::ThreadFuture>::ID) -> Waker {
     executor().waker(tid)
+}
+
+/// Returns the thread corresponding to the tid.
+pub fn thread(tid: &<ThreadFuture as executor::ThreadFuture>::ID) -> Option<Arc<Thread>> {
+    executor().thread(tid)
 }
 
 struct BlockOnWaker {

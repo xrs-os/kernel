@@ -1,5 +1,5 @@
 use alloc::str;
-use core::{fmt, hash::Hash, ops::Deref};
+use core::{borrow::Borrow, fmt, hash::Hash, ops::Deref};
 
 pub const DIR_ENTRY_NAME_CAP: usize = 255;
 
@@ -50,6 +50,17 @@ impl PartialEq for FsStr {
 
 impl Eq for FsStr {}
 
+impl PartialOrd for FsStr {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        self.as_bytes().partial_cmp(other.as_bytes())
+    }
+}
+impl Ord for FsStr {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_bytes().cmp(other.as_bytes())
+    }
+}
+
 pub type DirEntryName = FsString<{ DIR_ENTRY_NAME_CAP }>;
 
 impl<const CAP: usize> Deref for FsString<{ CAP }> {
@@ -97,6 +108,7 @@ impl<const CAP: usize> PartialEq for FsString<CAP> {
         AsRef::<FsStr>::as_ref(self) == other.as_ref()
     }
 }
+impl<const CAP: usize> Eq for FsString<CAP> {}
 
 impl<const CAP: usize> Hash for FsString<CAP> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
@@ -105,7 +117,23 @@ impl<const CAP: usize> Hash for FsString<CAP> {
     }
 }
 
-impl<const CAP: usize> Eq for FsString<CAP> {}
+impl<const CAP: usize> PartialOrd for FsString<CAP> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        self.as_slice().partial_cmp(other.as_slice())
+    }
+}
+
+impl<const CAP: usize> Ord for FsString<CAP> {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_slice().cmp(other.as_slice())
+    }
+}
+
+impl<const CAP: usize> Borrow<FsStr> for FsString<CAP> {
+    fn borrow(&self) -> &FsStr {
+        FsStr::from_bytes(self.as_bytes())
+    }
+}
 
 impl<const CAP: usize> From<&str> for FsString<CAP> {
     fn from(s: &str) -> Self {

@@ -319,11 +319,16 @@ impl Future for ThreadFuture {
     }
 }
 
-impl executor::Thread for ThreadFuture {
+impl executor::ThreadFuture for ThreadFuture {
     type ID = RawThreadId;
+    type Thread = Arc<Thread>;
 
     fn id(&self) -> &Self::ID {
         self.thread.id()
+    }
+
+    fn thread(&self) -> &Self::Thread {
+        &self.thread
     }
 }
 

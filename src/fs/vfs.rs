@@ -20,9 +20,10 @@ pub enum Error {
     InvalidDirEntryName(Box<DirEntryName>),
     WrongFS,
     ReadOnly,
-    UnsupportedFs(String),
+    UnsupportedFs(String /* filesystem name */),
     InvalidSeekOffset,
     Unsupport,
+    NoSuchProcess(u32 /* pid */),
 }
 
 pub struct Vfs<FS> {
@@ -55,6 +56,7 @@ impl<FS: Filesystem> Vfs<FS> {
         if parent_dir.lookup(filename).await?.is_some() {
             return Err(Error::EntryExist);
         }
+
         let new_inode = self.inner.create_inode(mode, uid, gid, create_time).await?;
         parent_dir
             .append(filename.into(), new_inode.id(), FileType::from_mode(mode))
@@ -62,6 +64,8 @@ impl<FS: Filesystem> Vfs<FS> {
         if mode.is_dir() {
             new_inode.append_dot(parent_dir.id()).await?;
         }
+        parent_dir.sync().await?;
+        new_inode.sync().await?;
         Ok(new_inode)
     }
 
@@ -181,6 +185,7 @@ pub enum FileType {
 }
 
 impl FileType {
+    #[allow(dead_code)]
     fn from_mode(mode: Mode) -> Option<Self> {
         Some(if mode.contains(Mode::TY_REG) {
             Self::RegFile
@@ -203,6 +208,7 @@ impl FileType {
 }
 
 bitflags! {
+    #[derive(Default)]
     pub struct Mode: u16 {
         // File type
         /// Socket File
@@ -285,7 +291,7 @@ impl Mode {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Metadata {
     pub mode: Mode,
     pub uid: u32,
@@ -303,6 +309,7 @@ pub struct Metadata {
     pub blk_count: usize,
 }
 
+#[allow(dead_code)]
 impl Metadata {
     fn is_dir(&self) -> bool {
         self.mode.is_dir()
@@ -391,6 +398,7 @@ pub trait Inode: Send + Sync {
     type RemoveFut<'a>: Future<Output = Result<Option<RawDirEntry>>> + Send + 'a;
     type LsRawFut<'a>: Future<Output = Result<Vec<RawDirEntry>>> + Send + 'a;
     type LsFut<'a>: Future<Output = Result<Vec<DirEntry<Self::FS>>>> + Send + 'a;
+    type IOCtlFut<'a>: Future<Output = Result<()>> + Send + 'a;
 
     fn id(&self) -> InodeId;
 
@@ -430,4 +438,7 @@ pub trait Inode: Send + Sync {
 
     /// List all dir entrys in the current directory
     fn ls(&self) -> Self::LsFut<'_>;
+
+    /// Call filesystem specific ioctl methods
+    fn ioctl(&self, cmd: u32, arg: usize) -> Self::IOCtlFut<'_>;
 }

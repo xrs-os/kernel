@@ -3,11 +3,11 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
 use crate::spinlock;
 
-use super::{vfs, DirEntryName};
+use super::{mount_fs::NotDynInode, vfs, DirEntryName};
 use hashbrown::HashMap;
 
 /// A filesystem based on RAM.
@@ -146,7 +146,7 @@ struct DirEntry {
 }
 
 enum Content {
-    Dir(HashMap<DirEntryName, DirEntry>),
+    Dir(BTreeMap<DirEntryName, DirEntry>),
     File(Vec<u8>),
 }
 
@@ -161,14 +161,11 @@ impl Inode {
     fn lookup_raw<'a>(&'a self, name: &'a super::FsStr) -> vfs::Result<Option<vfs::RawDirEntry>> {
         let inner = self.inner.read();
         match &inner.content {
-            Content::Dir(dentrys) => {
-                let name = Box::new(DirEntryName::from(name));
-                Ok(dentrys.get(&name).map(|dentry| vfs::RawDirEntry {
-                    inode_id: dentry.inode_id,
-                    name,
-                    file_type: Some(dentry.file_type.clone()),
-                }))
-            }
+            Content::Dir(dentrys) => Ok(dentrys.get(name).map(|dentry| vfs::RawDirEntry {
+                inode_id: dentry.inode_id,
+                name: Box::new(DirEntryName::from(name)),
+                file_type: Some(dentry.file_type.clone()),
+            })),
             Content::File(_) => Err(vfs::Error::NotDir),
         }
     }
@@ -208,38 +205,27 @@ impl Inode {
     }
 }
 
+impl NotDynInode for Arc<Inode> {}
+
 impl vfs::Inode for Arc<Inode> {
     type FS = Arc<RamFs>;
 
     type MetadataFut<'a> = future::Ready<vfs::Result<vfs::Metadata>>;
-
     type ChownFut<'a> = future::Ready<vfs::Result<()>>;
-
     type ChmodFut<'a> = future::Ready<vfs::Result<()>>;
-
     type LinkFut<'a> = future::Ready<vfs::Result<()>>;
-
     type UnlinkFut<'a> = future::Ready<vfs::Result<()>>;
-
     type ReadAtFut<'a> = future::Ready<vfs::Result<usize>>;
-
     type WriteAtFut<'a> = future::Ready<vfs::Result<usize>>;
-
     type SyncFut<'a> = future::Ready<vfs::Result<()>>;
-
     type AppendDotFut<'a> = future::Ready<vfs::Result<()>>;
-
     type LookupRawFut<'a> = future::Ready<vfs::Result<Option<vfs::RawDirEntry>>>;
-
     type LookupFut<'a> = future::Ready<vfs::Result<Option<vfs::DirEntry<Self::FS>>>>;
-
     type AppendFut<'a> = future::Ready<vfs::Result<()>>;
-
     type RemoveFut<'a> = future::Ready<vfs::Result<Option<vfs::RawDirEntry>>>;
-
     type LsRawFut<'a> = future::Ready<vfs::Result<Vec<vfs::RawDirEntry>>>;
-
     type LsFut<'a> = future::Ready<vfs::Result<Vec<vfs::DirEntry<Self::FS>>>>;
+    type IOCtlFut<'a> = future::Ready<vfs::Result<()>>;
 
     fn id(&self) -> usize {
         self.inode_id
@@ -354,13 +340,12 @@ impl vfs::Inode for Arc<Inode> {
         let mut inner = self.inner.write();
         future::ready(match &mut inner.content {
             Content::Dir(dentrys) => {
-                let name = Box::new(dir_entry_name.into());
-                if let Some(dentry) = dentrys.remove(&name) {
+                if let Some(dentry) = dentrys.remove(dir_entry_name) {
                     Inode::unlink(&RamFs::load_inode(&self.fs, dentry.inode_id).unwrap()).map(
                         |_| {
                             Some(vfs::RawDirEntry {
                                 inode_id: dentry.inode_id,
-                                name,
+                                name: Box::new(dir_entry_name.into()),
                                 file_type: Some(dentry.file_type),
                             })
                         },
@@ -376,7 +361,7 @@ impl vfs::Inode for Arc<Inode> {
     fn ls_raw(&self) -> Self::LsRawFut<'_> {
         let inner = self.inner.read();
         future::ready(match &inner.content {
-            Content::Dir(dentrys) => Ok(dentrys.into_iter().map(Into::into).collect()),
+            Content::Dir(dentrys) => Ok(dentrys.iter().map(Into::into).collect()),
             Content::File(_) => Err(vfs::Error::NotDir),
         })
     }
@@ -386,7 +371,7 @@ impl vfs::Inode for Arc<Inode> {
 
         future::ready(match &inner.content {
             Content::Dir(dentrys) => Ok(dentrys
-                .into_iter()
+                .iter()
                 .map(|entry| vfs::DirEntry {
                     raw: entry.into(),
                     fs: self.fs.clone(),
@@ -394,6 +379,10 @@ impl vfs::Inode for Arc<Inode> {
                 .collect()),
             Content::File(_) => Err(vfs::Error::NotDir),
         })
+    }
+
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Self::IOCtlFut<'_> {
+        future::ready(Err(vfs::Error::Unsupport))
     }
 }
 

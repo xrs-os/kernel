@@ -9,10 +9,14 @@ extern crate alloc;
 #[cfg(feature = "fifo")]
 pub mod fifo;
 
-pub trait Thread: Future + 'static {
+pub trait ThreadFuture: Future + 'static {
     type ID: Clone + Ord + Send + Sync;
 
+    type Thread: Clone;
+
     fn id(&self) -> &Self::ID;
+
+    fn thread(&self) -> &Self::Thread;
 }
 
 pub trait WaitForInterrupt {

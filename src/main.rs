@@ -16,13 +16,11 @@
 #![feature(linked_list_cursors)]
 #![feature(const_btree_new)]
 #![feature(maybe_uninit_extra)]
+#![feature(map_try_insert)]
 #![allow(incomplete_features)]
 #![allow(dead_code)]
 
-use alloc::sync::Arc;
 use arch::interrupt as interruptA;
-
-use spinlock::MutexIrq;
 
 #[macro_use]
 extern crate alloc;
@@ -61,7 +59,7 @@ fn kmain(_hartid: usize, dtb_pa: usize) {
     cpu::init();
     mm::init();
     driver::init(dtb_pa);
-    fs::init(create_fs_inner());
+    fs::init();
     proc::init();
 
     loop {
@@ -73,24 +71,5 @@ fn kmain(_hartid: usize, dtb_pa: usize) {
 mod handler {
     pub fn on_timer() {
         // println!("timer tiggered");
-    }
-}
-
-fn create_fs_inner() -> Arc<dyn fs::mount_fs::DynFilesystem> {
-    let blk_device = driver::blk_drivers()
-        .first()
-        .expect("No block device could be found.")
-        .clone();
-
-    #[cfg(feature = "naive_fs")]
-    {
-        let naivefs = proc::executor::block_on(async {
-            Arc::new(
-                naive_fs::NaiveFs::<MutexIrq<()>, _>::open(fs::Disk::new(blk_device), false)
-                    .await
-                    .expect("Failed to open naive filesystem."),
-            )
-        });
-        Arc::new(naivefs) // TODO trace err
     }
 }

@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Timespec {
     pub sec: i64,  // Seconds - >= 0
     pub nsec: i32, // Nanoseconds - [0, 999999999]

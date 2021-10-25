@@ -18,6 +18,8 @@ pub enum Error {
     UNKNOWM = 0,
     /// No such file or directory
     ENOENT = 2,
+    /// No such process
+    ESRCH = 3,
     /// I/O error
     EIO = 5,
     /// Exec format error

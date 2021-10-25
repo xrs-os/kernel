@@ -168,24 +168,23 @@ impl Mode {
     }
 }
 
-pub type InodeLoadFut<'a, RwLockType, MutexType, DK> = Map<
+pub type InodeLoadFut<'a, MutexType, DK> = Map<
     WithArg2<blk_device::ReadValAtFut<'a, RawInode, DK>, InodeId, &'a Arc<NaiveFs<MutexType, DK>>>,
     fn(
         (Result<RawInode>, InodeId, &'a Arc<NaiveFs<MutexType, DK>>),
-    ) -> Result<Option<Inode<RwLockType, MutexType, DK>>>,
+    ) -> Result<Option<Inode<MutexType, DK>>>,
 >;
 
-pub struct Inode<RwLockType, MutexType, DK> {
+pub struct Inode<MutexType, DK> {
     pub inode_id: InodeId,
-    pub raw: RwLock<RwLockType, MaybeDirty<RawInode>>,
+    pub raw: RwLock<MutexType, MaybeDirty<RawInode>>,
     naive_fs: Arc<NaiveFs<MutexType, DK>>,
 
     direct_blk_len: u32,
 }
 
-impl<RwLockType, MutexType, DK> Inode<RwLockType, MutexType, DK>
+impl<MutexType, DK> Inode<MutexType, DK>
 where
-    RwLockType: lock_api::RawRwLock,
     MutexType: lock_api::RawMutex,
     DK: Disk + Sync,
 {
@@ -208,7 +207,7 @@ where
     pub fn load(
         inode_id: InodeId,
         naive_fs: &Arc<NaiveFs<MutexType, DK>>,
-    ) -> InodeLoadFut<'_, RwLockType, MutexType, DK> {
+    ) -> InodeLoadFut<'_, MutexType, DK> {
         naive_fs
             .blk_device
             .read_val_at::<RawInode>(naive_fs.super_blk.raw_inode_addr(inode_id))
@@ -248,8 +247,8 @@ where
     pub fn link(
         &self,
     ) -> Map<
-        sleeplock::RwLockWriteFuture<RwLockType, MaybeDirty<RawInode>>,
-        fn(sleeplock::RwLockWriteGuard<RwLockType, MaybeDirty<RawInode>>) -> (),
+        sleeplock::RwLockWriteFuture<MutexType, MaybeDirty<RawInode>>,
+        fn(sleeplock::RwLockWriteGuard<MutexType, MaybeDirty<RawInode>>) -> (),
     > {
         self.raw.write().map(|mut raw| {
             if raw.valid() {
@@ -506,9 +505,8 @@ where
     }
 }
 
-impl<RwLockType, MutexType, DK> Inode<RwLockType, MutexType, DK>
+impl<MutexType, DK> Inode<MutexType, DK>
 where
-    RwLockType: lock_api::RawRwLock<GuardMarker = lock_api::GuardSend> + Sync + Send,
     MutexType: lock_api::RawMutex<GuardMarker = lock_api::GuardSend> + Sync + Send,
     DK: Disk + Sync + Send,
 {
@@ -517,9 +515,8 @@ where
     }
 }
 
-impl<RwLockType, MutexType, DK> Syncable for Inode<RwLockType, MutexType, DK>
+impl<MutexType, DK> Syncable for Inode<MutexType, DK>
 where
-    RwLockType: lock_api::RawRwLock<GuardMarker = lock_api::GuardSend> + Sync + Send,
     MutexType: lock_api::RawMutex<GuardMarker = lock_api::GuardSend> + Sync + Send,
     DK: Sync + Send,
 {
@@ -807,11 +804,7 @@ mod test {
             (&mut direct_blks_arr[..direct_blks.len()]).copy_from_slice(&direct_blks);
             raw_inode.direct_blks = direct_blks_arr;
 
-            let inode = Inode::<spin::RwLock<()>, _, _>::new(
-                1,
-                raw_inode,
-                Arc::new(create_naive_fs(blk_size)),
-            );
+            let inode = Inode::new(1, raw_inode, Arc::new(create_naive_fs(blk_size)));
 
             let actual: Vec<_> = block_on(inode.find_in_direct_blks::<false>(offset, len))
                 .unwrap()
@@ -898,11 +891,7 @@ mod test {
             let mut raw_inode = MaybeDirty::new(Addr::new(0, 0), RawInode::default());
             let indirect_blk_id = 99;
             raw_inode.indirect_blk = indirect_blk_id;
-            let inode = Inode::<spin::RwLock<()>, _, _>::new(
-                1,
-                raw_inode,
-                Arc::new(create_naive_fs(blk_size)),
-            );
+            let inode = Inode::new(1, raw_inode, Arc::new(create_naive_fs(blk_size)));
 
             block_on(
                 inode
@@ -961,11 +950,7 @@ mod test {
 
             raw_inode.direct_blks = direct_blks;
 
-            let inode = Inode::<spin::RwLock<()>, _, _>::new(
-                1,
-                raw_inode,
-                Arc::new(create_naive_fs(blk_size)),
-            );
+            let inode = Inode::new(1, raw_inode, Arc::new(create_naive_fs(blk_size)));
 
             block_on(
                 inode

@@ -1,8 +1,8 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 
+use super::{mount_fs::NotDynInode, vfs};
 use crate::{spinlock::MutexIrq, time::Timespec};
-
-use super::{mount_fs::BoxFuture, vfs};
+use futures_util::future::BoxFuture;
 
 pub type Filesystem<InnerFs> = Arc<CacheFs<InnerFs>>;
 
@@ -80,6 +80,8 @@ pub struct CInode<InnerFs: vfs::Filesystem> {
     inner: InnerFs::Inode,
 }
 
+impl<InnerFs: vfs::Filesystem + 'static> NotDynInode for Arc<CInode<InnerFs>> {}
+
 impl<InnerFs: vfs::Filesystem + 'static> vfs::Inode for Arc<CInode<InnerFs>> {
     type FS = Filesystem<InnerFs>;
 
@@ -98,6 +100,7 @@ impl<InnerFs: vfs::Filesystem + 'static> vfs::Inode for Arc<CInode<InnerFs>> {
     type RemoveFut<'a> = <InnerFs::Inode as vfs::Inode>::RemoveFut<'a>;
     type LsRawFut<'a> = <InnerFs::Inode as vfs::Inode>::LsRawFut<'a>;
     type LsFut<'a> = BoxFuture<'a, vfs::Result<Vec<vfs::DirEntry<Self::FS>>>>;
+    type IOCtlFut<'a> = <InnerFs::Inode as vfs::Inode>::IOCtlFut<'a>;
 
     fn id(&self) -> usize {
         self.inner.id()
@@ -186,5 +189,9 @@ impl<InnerFs: vfs::Filesystem + 'static> vfs::Inode for Arc<CInode<InnerFs>> {
                 })
                 .collect())
         })
+    }
+
+    fn ioctl(&self, cmd: u32, arg: usize) -> Self::IOCtlFut<'_> {
+        self.inner.ioctl(cmd, arg)
     }
 }

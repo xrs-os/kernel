@@ -60,7 +60,7 @@ impl Disk {
 
     /// Sync disk, ensuring that all intermediately buffered contents reach their destination.
     pub async fn sync(&self) -> blk::Result<()> {
-        todo!()
+        Ok(())
     }
 
     pub fn capacity(&self) -> usize {
@@ -276,16 +276,27 @@ impl Future for WriteAtFut<'_> {
                                     fut: None,
                                 }
                             } else {
+                                let src = if write_space.start_blk_id == write_space.end_blk_id {
+                                    &this.src[..write_space.pos_of_tail_partial_blk.unwrap()
+                                        - write_space.pos_of_head_partial_blk.unwrap()]
+                                } else {
+                                    &this.src
+                                        [..blk_size - write_space.pos_of_head_partial_blk.unwrap()]
+                                };
+
                                 WriteAtState::HeadPartialBlk(Some(write_head_partial_blk(
                                     *this.phy_blk_device,
                                     write_space.start_blk_id,
-                                    &this.src
-                                        [..blk_size - write_space.pos_of_head_partial_blk.unwrap()],
+                                    src,
                                 )))
                             }
                         }
                         Some(write_partial_blk_fut) => {
-                            *this.written_size += ready!(write_partial_blk_fut.poll(cx)?);
+                            let written_size = ready!(write_partial_blk_fut.poll(cx)?);
+                            if write_space.start_blk_id == write_space.end_blk_id {
+                                return Poll::Ready(Ok(written_size));
+                            }
+                            *this.written_size += written_size;
                             WriteAtState::FullBlks {
                                 blk_id: write_space.start_blk_id + 1,
                                 fut: None,
@@ -328,6 +339,7 @@ impl Future for WriteAtFut<'_> {
                     }
                     Some(fut) => {
                         ready!(fut.poll(cx)?);
+
                         *this.written_size += blk_size;
                         // Write next full-block data
                         WriteAtState::FullBlks {
