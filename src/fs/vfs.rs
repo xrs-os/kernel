@@ -39,7 +39,7 @@ impl<FS: Filesystem> Vfs<FS> {
         self.inner.root_dir_entry()
     }
 
-    pub async fn create(
+    pub async fn create_parent_dentry(
         &self,
         parent_dir: &DirEntry<FS>,
         filename: &FsStr,
@@ -52,7 +52,19 @@ impl<FS: Filesystem> Vfs<FS> {
             .as_dir()
             .await?
             .ok_or(Error::NoSuchFileOrDirectory)?;
+        self.create(&parent_dir, filename, mode, uid, gid, create_time)
+            .await
+    }
 
+    pub async fn create(
+        &self,
+        parent_dir: &FS::Inode,
+        filename: &FsStr,
+        mode: Mode,
+        uid: u32,
+        gid: u32,
+        create_time: Timespec,
+    ) -> Result<FS::Inode> {
         if parent_dir.lookup(filename).await?.is_some() {
             return Err(Error::EntryExist);
         }

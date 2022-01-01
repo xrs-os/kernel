@@ -74,7 +74,7 @@ async fn find_or_create_dev_dir() -> vfs::Result<Arc<dyn DynInode>> {
             Some(dev) => dev.as_dir().await?.ok_or(vfs::Error::WrongFS)?,
             None => {
                 let new_inode = root_fs()
-                    .create(
+                    .create_parent_dentry(
                         &root_dir_entry,
                         FsStr::from_bytes("dev".as_bytes()),
                         vfs::Mode::TY_DIR

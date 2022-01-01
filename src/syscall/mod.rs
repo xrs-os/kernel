@@ -6,7 +6,11 @@ mod fs;
 mod proc;
 mod syscall_table;
 
-use fs::{sys_fstat, sys_fstatat, sys_lseek, sys_read, sys_write, FStatAtFlags, LSeekWhence, Stat};
+use crate::fs::{vfs, Path};
+use fs::{
+    sys_fstat, sys_fstatat, sys_lseek, sys_openat, sys_read, sys_write, FStatAtFlags, LSeekWhence,
+    OpenFlags, Stat,
+};
 use proc::{sys_exit, sys_fork};
 use syscall_table::*;
 pub type Result = core::result::Result<usize, Error>;
@@ -36,6 +40,8 @@ pub enum Error {
     ENOTDIR = 20,
     /// Invalid flag specified in flags.
     EINVAL = 22,
+    /// Too many open files
+    EMFILE = 24,
     /// No space left on device
     ENOSPC = 28,
     /// Read-only file system
@@ -54,6 +60,17 @@ pub async fn syscall(thread: &Arc<Thread>) {
     };
 
     let res = match syscall_num {
+        SYS_OPENAT => unsafe {
+            let path_ptr = syscall_args[1] as *const u8;
+            sys_openat(
+                thread,
+                syscall_args[0] as isize,
+                path(path_ptr),
+                mem::transmute::<_, OpenFlags>(syscall_args[2]),
+                mem::transmute::<_, vfs::Mode>(syscall_args[3] as u16),
+            )
+            .await
+        },
         SYS_LSEEK => match LSeekWhence::from_primitive(syscall_args[2] as u8) {
             Some(whence) => {
                 sys_lseek(thread, syscall_args[0], syscall_args[1] as i64, whence).await
@@ -83,7 +100,7 @@ pub async fn syscall(thread: &Arc<Thread>) {
             sys_fstatat(
                 thread,
                 syscall_args[0] as isize,
-                slice::from_raw_parts(path_ptr, c_str_len(path_ptr)),
+                path(path_ptr),
                 mem::transmute::<_, &mut Stat>(syscall_args[2]),
                 mem::transmute::<_, FStatAtFlags>(syscall_args[3] as u32),
             )
@@ -106,6 +123,10 @@ pub async fn syscall(thread: &Arc<Thread>) {
         Ok(ret) => thread.inner.write().context.set_syscall_ret(ret),
         Err(_) => todo!(),
     }
+}
+
+unsafe fn path(path_ptr: *const u8) -> &'static Path {
+    Path::from_bytes(slice::from_raw_parts(path_ptr, c_str_len(path_ptr)))
 }
 
 unsafe fn c_str_len(mut str_ptr: *const u8) -> usize {
