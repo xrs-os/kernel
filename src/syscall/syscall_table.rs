@@ -1,5 +1,6 @@
 // generic syscall table.
 pub const SYS_OPENAT: usize = 56;
+pub const SYS_CLOSE: usize = 57;
 pub const SYS_LSEEK: usize = 62;
 pub const SYS_READ: usize = 63;
 pub const SYS_WRITE: usize = 64;

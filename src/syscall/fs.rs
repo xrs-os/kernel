@@ -131,17 +131,33 @@ pub async fn sys_openat(
         lookup_inode_at(thread, dirfd, path).await?
     };
     let descriptor = file::Descriptor::new(inode, flags.into(), flags.contains(OpenFlags::CLOEXEC));
-    let fd = thread.proc().add_file(descriptor).ok_or(Error::EMFILE)?;
+    let fd = thread
+        .proc()
+        .open_files
+        .add_file(descriptor)
+        .ok_or(Error::EMFILE)?;
     Ok(fd)
+}
+
+pub fn sys_close(thread: &Arc<Thread>, fd: isize) -> Result {
+    let proc = thread.proc();
+    proc.open_files
+        .remove_file(fd as usize)
+        .ok_or(Error::EBADF)?;
+    Ok(0)
 }
 
 pub async fn sys_lseek(
     thread: &Arc<Thread>,
-    fd: usize,
+    fd: isize,
     offset: i64,
     whence: LSeekWhence,
 ) -> Result {
-    let mut descriptor = thread.proc().get_file(fd as usize).ok_or(Error::EBADF)?;
+    let mut descriptor = thread
+        .proc()
+        .open_files
+        .get_file(fd as usize)
+        .ok_or(Error::EBADF)?;
     let seek_from = match whence {
         LSeekWhence::Set => SeekFrom::Start(offset as u64),
         LSeekWhence::Cur => SeekFrom::Current(offset),
@@ -150,15 +166,23 @@ pub async fn sys_lseek(
     Ok(descriptor.seek(seek_from).await? as usize)
 }
 
-pub async fn sys_read(thread: &Arc<Thread>, fd: usize, buf: *mut u8, count: usize) -> Result {
-    let mut descriptor = thread.proc().get_file(fd as usize).ok_or(Error::EBADF)?;
+pub async fn sys_read(thread: &Arc<Thread>, fd: isize, buf: *mut u8, count: usize) -> Result {
+    let mut descriptor = thread
+        .proc()
+        .open_files
+        .get_file(fd as usize)
+        .ok_or(Error::EBADF)?;
     let buf = unsafe { slice::from_raw_parts_mut(buf, count) };
     let len = descriptor.read(buf).await?;
     Ok(len)
 }
 
-pub async fn sys_write(thread: &Arc<Thread>, fd: usize, buf: *const u8, count: usize) -> Result {
-    let mut descriptor = thread.proc().get_file(fd as usize).ok_or(Error::EBADF)?;
+pub async fn sys_write(thread: &Arc<Thread>, fd: isize, buf: *const u8, count: usize) -> Result {
+    let mut descriptor = thread
+        .proc()
+        .open_files
+        .get_file(fd as usize)
+        .ok_or(Error::EBADF)?;
     let buf = unsafe { slice::from_raw_parts(buf, count) };
     let len = descriptor.write(buf).await?;
     Ok(len)
@@ -212,7 +236,10 @@ pub async fn lookup_inode_at(
     let mut inode = if dirfd == AT_FDCWD {
         proc.cwd.read().inode().await?.ok_or(Error::ENOENT)?
     } else {
-        proc.get_file(dirfd as usize).ok_or(Error::EBADF)?.inode
+        proc.open_files
+            .get_file(dirfd as usize)
+            .ok_or(Error::EBADF)?
+            .inode
     };
     if !path.is_empty() {
         inode = inode

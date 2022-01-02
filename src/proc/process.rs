@@ -40,7 +40,7 @@ pub struct Proc {
     cmd: String,
     // Current working directory
     pub cwd: RwLockIrq<DirEntry>,
-    open_files: OpenFiles,
+    pub open_files: OpenFiles,
     pub memory: RwLockIrq<Mem>,
     signal: MutexIrq<Signal>,
 }
@@ -210,14 +210,6 @@ impl Proc {
                 t.waker().wake();
             });
         // TODO: Handling sub-processes
-    }
-
-    pub fn get_file(&self, fd: usize) -> Option<file::Descriptor> {
-        self.open_files.get_file(fd)
-    }
-
-    pub fn add_file(&self, file: file::Descriptor) -> Option<usize> {
-        self.open_files.add_file(file)
     }
 }
 

@@ -8,11 +8,12 @@ mod syscall_table;
 
 use crate::fs::{vfs, Path};
 use fs::{
-    sys_fstat, sys_fstatat, sys_lseek, sys_openat, sys_read, sys_write, FStatAtFlags, LSeekWhence,
-    OpenFlags, Stat,
+    sys_close, sys_fstat, sys_fstatat, sys_lseek, sys_openat, sys_read, sys_write, FStatAtFlags,
+    LSeekWhence, OpenFlags, Stat,
 };
 use proc::{sys_exit, sys_fork};
 use syscall_table::*;
+
 pub type Result = core::result::Result<usize, Error>;
 
 #[repr(u8)]
@@ -71,16 +72,23 @@ pub async fn syscall(thread: &Arc<Thread>) {
             )
             .await
         },
+        SYS_CLOSE => sys_close(thread, syscall_args[0] as isize),
         SYS_LSEEK => match LSeekWhence::from_primitive(syscall_args[2] as u8) {
             Some(whence) => {
-                sys_lseek(thread, syscall_args[0], syscall_args[1] as i64, whence).await
+                sys_lseek(
+                    thread,
+                    syscall_args[0] as isize,
+                    syscall_args[1] as i64,
+                    whence,
+                )
+                .await
             }
             None => Err(Error::EINVAL),
         },
         SYS_READ => {
             sys_read(
                 thread,
-                syscall_args[0],
+                syscall_args[0] as isize,
                 syscall_args[1] as *mut u8,
                 syscall_args[2],
             )
@@ -89,7 +97,7 @@ pub async fn syscall(thread: &Arc<Thread>) {
         SYS_WRITE => {
             sys_write(
                 thread,
-                syscall_args[0],
+                syscall_args[0] as isize,
                 syscall_args[1] as *const u8,
                 syscall_args[2],
             )
