@@ -18,6 +18,10 @@ impl Path {
         self.0.is_empty()
     }
 
+    pub fn is_absolute(&self) -> bool {
+        self.0.as_bytes()[0] == b'/'
+    }
+
     pub fn shift(&self) -> (&Self, Option<&FsStr>) {
         let mut bytes = self.0.as_bytes();
 

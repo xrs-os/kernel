@@ -242,13 +242,13 @@ pub async fn lookup_inode_at(
             .inode
     };
     if !path.is_empty() {
-        inode = inode
-            .lookup(path.inner())
+        inode = root_fs()
+            .find(&inode, path)
             .await?
             .ok_or(Error::ENOENT)?
             .inode()
             .await?
-            .ok_or(Error::ENOENT)?
+            .ok_or(Error::ENOENT)?;
     }
     Ok(inode)
 }

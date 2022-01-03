@@ -406,7 +406,7 @@ pub fn create_init_proc() -> Arc<Proc> {
     // TODO trace error
     let init_inode = executor::block_on(async {
         match root_fs()
-            .find(
+            .find_parent_dentry(
                 &root_fs().root().await,
                 Path::from_bytes("/init".as_bytes()),
             )

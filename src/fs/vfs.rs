@@ -83,7 +83,7 @@ impl<FS: Filesystem> Vfs<FS> {
 
     pub async fn find<'a>(
         &'a self,
-        parent_dir: &DirEntry<FS>,
+        parent_dir: &FS::Inode,
         path: &'a Path,
     ) -> Result<Option<DirEntry<FS>>> {
         let (mut path, basename) = match path.pop() {
@@ -91,23 +91,46 @@ impl<FS: Filesystem> Vfs<FS> {
             _ => return Ok(None),
         };
 
-        let mut current_dir = parent_dir
-            .as_dir()
-            .await?
-            .ok_or(Error::NoSuchFileOrDirectory)?;
+        let mut current_dir_inode: FS::Inode;
+        let mut current_dir = if path.is_absolute() {
+            current_dir_inode = self
+                .root()
+                .await
+                .as_dir()
+                .await?
+                .ok_or(Error::NoSuchFileOrDirectory)?;
+            &current_dir_inode
+        } else {
+            parent_dir
+        };
 
         while let (rest_path, Some(name)) = path.shift() {
             path = rest_path;
             match current_dir.lookup(name).await? {
                 None => return Ok(None),
                 Some(entry) => match entry.as_dir().await? {
-                    Some(inode) => current_dir = inode,
+                    Some(inode) => {
+                        current_dir_inode = inode;
+                        current_dir = &current_dir_inode;
+                    }
                     None => return Ok(None),
                 },
             }
         }
 
         current_dir.lookup(basename).await
+    }
+
+    pub async fn find_parent_dentry<'a>(
+        &'a self,
+        parent_dir: &DirEntry<FS>,
+        path: &'a Path,
+    ) -> Result<Option<DirEntry<FS>>> {
+        let parent_dir = parent_dir
+            .as_dir()
+            .await?
+            .ok_or(Error::NoSuchFileOrDirectory)?;
+        self.find(&parent_dir, path).await
     }
 
     pub async fn mv(
