@@ -1,5 +1,9 @@
 enum SyscallNum {
-    Exit = 2,
+    Openat = 56,
+    Close = 57,
+    Read = 63,
+    Write = 64,
+    Exit = 93,
 }
 
 macro_rules! syscall {
@@ -46,7 +50,50 @@ syscall! {
     syscall5(a, b, c, d, e, f,);
 }
 
+#[allow(dead_code)]
 pub fn sys_exit(status: isize) -> ! {
     unsafe { syscall1(SyscallNum::Exit, status as usize) };
     unreachable!()
+}
+
+#[allow(dead_code)]
+pub fn sys_openat(dirfd: isize, path: &str, flags: usize, mode: u16) -> isize {
+    unsafe {
+        syscall4(
+            SyscallNum::Openat,
+            dirfd as usize,
+            path.as_ptr() as usize,
+            flags,
+            mode as usize,
+        ) as isize
+    }
+}
+
+#[allow(dead_code)]
+pub fn sys_close(fd: isize) -> usize {
+    unsafe { syscall1(SyscallNum::Close, fd as usize) }
+}
+
+#[allow(dead_code)]
+pub fn sys_read(fd: isize, buf: &mut [u8]) -> usize {
+    unsafe {
+        syscall3(
+            SyscallNum::Read,
+            fd as usize,
+            buf.as_ptr() as usize,
+            buf.len(),
+        )
+    }
+}
+
+#[allow(dead_code)]
+pub fn sys_write(fd: isize, buf: &[u8]) -> usize {
+    unsafe {
+        syscall3(
+            SyscallNum::Write,
+            fd as usize,
+            buf.as_ptr() as usize,
+            buf.len(),
+        )
+    }
 }
