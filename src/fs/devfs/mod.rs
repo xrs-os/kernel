@@ -18,12 +18,26 @@ pub struct DevFs {
 }
 
 impl DevFs {
-    pub fn new(dev_inodes: impl IntoIterator<Item = Arc<dyn DevInode>>) -> Arc<Self> {
-        let inodes = dev_inodes
-            .into_iter()
-            .enumerate()
-            .map(|(inode_id, dev)| (inode_id + DEV_ROOT_INODE_ID, dev))
-            .collect::<BTreeMap<_, _>>();
+    pub fn new(
+        dev_inodes: impl IntoIterator<Item = (DirEntryName, Option<vfs::FileType>, Arc<dyn DevInode>)>,
+    ) -> Arc<Self> {
+        let mut inodes: BTreeMap<vfs::InodeId, Arc<dyn DevInode>> = BTreeMap::new();
+        let mut dir_entries: BTreeMap<DirEntryName, vfs::RawDirEntry> = BTreeMap::new();
+
+        for (idx, (dir_entry_name, file_type, inode)) in dev_inodes.into_iter().enumerate() {
+            let inode_id = idx + DEV_ROOT_INODE_ID;
+            inodes.insert(inode_id, inode);
+            dir_entries.insert(
+                dir_entry_name.clone(),
+                vfs::RawDirEntry {
+                    inode_id,
+                    name: Box::new(dir_entry_name),
+                    file_type,
+                },
+            );
+        }
+
+        inodes.insert(DEV_ROOT_INODE_ID, Arc::new(DevRootInode { dir_entries }));
         Arc::new(Self { inodes })
     }
 }

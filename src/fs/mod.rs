@@ -43,9 +43,11 @@ pub fn init() {
         // mount device filesystem
         unsafe { TTY = MaybeUninit::new(Arc::new(TtyInode::new())) };
 
-        let dev_fs = Arc::new(devfs::DevFs::new(vec![
-            tty().clone() as Arc<dyn devfs::DevInode>
-        ]));
+        let dev_fs = Arc::new(devfs::DevFs::new(vec![(
+            "tty".into(),
+            Some(vfs::FileType::ChrDev),
+            tty().clone() as Arc<dyn devfs::DevInode>,
+        )]));
 
         let dev_dir = find_or_create_dev_dir()
             .await
