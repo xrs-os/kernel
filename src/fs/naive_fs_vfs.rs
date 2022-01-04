@@ -11,7 +11,7 @@ use naive_fs::BoxFuture;
 use crate::{sleeplock, spinlock::MutexIrq};
 
 use super::{
-    blk::{self},
+    blk,
     disk::{self, Disk as FsDisk},
     mount_fs::NotDynInode,
     vfs, DirEntryName,

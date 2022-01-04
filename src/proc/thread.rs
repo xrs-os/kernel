@@ -20,12 +20,12 @@ use super::{
     executor::waker,
     signal::{self, SignalContext},
     tid::{self, RawThreadId, ThreadId},
-    Error, Proc, Result,
+    Error, Proc, ProcInitInfo, Result,
 };
 use crate::{
     arch::{
         interrupt::{Context as InterruptCtx, Trap},
-        memory::{user_stack_offset, user_stack_size},
+        memory::{user_init_stack, user_stack_offset, user_stack_size},
     },
     spinlock::RwLockIrq,
     syscall::syscall,
@@ -98,9 +98,7 @@ impl Thread {
         self.tid.id()
     }
 
-    pub fn new(tid: ThreadId, cmd: impl Into<String>, entry_point: VirtualAddress) -> Self {
-        let mut context = InterruptCtx::default();
-        context.set_entry_point(entry_point);
+    pub fn new(tid: ThreadId, cmd: impl Into<String>) -> Self {
         Self {
             tid,
             cmd: cmd.into(),
@@ -109,7 +107,7 @@ impl Thread {
             sig_pending: MaybeUnlock(signal::Pending::new()),
 
             inner: RwLockIrq::new(ThreadInner {
-                context,
+                context: InterruptCtx::default(),
                 state: State::INTERRUPTIBLE,
                 sig_alt_stack: signal::AltStack::default(),
                 sig_ctx: None,
@@ -118,14 +116,18 @@ impl Thread {
     }
 
     pub unsafe fn init(&self, proc: Arc<Proc>) -> MemoryResult<()> {
-        self.inner
-            .write()
-            .context
-            .set_init_stack(Self::alloc_user_stack(&proc)?);
+        Self::alloc_user_stack(&mut proc.memory.write())?;
 
         #[allow(clippy::cast_ref_to_mut)]
         (*(self as *const Self as *mut Self)).proc = MaybeUninit::new(proc);
         Ok(())
+    }
+
+    pub fn reset_context(&self, proc_init_info: &ProcInitInfo) {
+        let ctx = &mut self.inner.write().context;
+        ctx.set_entry_point(VirtualAddress(proc_init_info.auxval.at_entry as usize));
+        let sp = proc_init_info.push_to_stack(user_init_stack());
+        ctx.set_init_stack(sp);
     }
 
     pub fn fork(self: &Arc<Thread>, new_inner: ThreadInner) -> Result<Self> {
@@ -146,12 +148,10 @@ impl Thread {
     }
 
     // Allocate user stack, return stack pointer on success
-    fn alloc_user_stack(proc: &Arc<Proc>) -> MemoryResult<VirtualAddress> {
-        let mut memory = proc.memory.write();
-
+    fn alloc_user_stack(memory: &mut crate::mm::Mem) -> MemoryResult<()> {
         let stack_start = VirtualAddress(user_stack_offset() - user_stack_size());
         let stack_end = VirtualAddress(user_stack_offset());
-        memory.add_segment(
+        memory.add_user_segment(
             Segment {
                 addr_range: stack_start..stack_end,
                 flags: PageParamA::flag_set_user(
@@ -161,7 +161,7 @@ impl Thread {
             },
             &[],
         )?;
-        Ok(stack_end)
+        Ok(())
     }
 
     pub fn waker(&self) -> Waker {

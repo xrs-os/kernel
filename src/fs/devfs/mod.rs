@@ -24,7 +24,6 @@ impl DevFs {
             .enumerate()
             .map(|(inode_id, dev)| (inode_id + DEV_ROOT_INODE_ID, dev))
             .collect::<BTreeMap<_, _>>();
-
         Arc::new(Self { inodes })
     }
 }

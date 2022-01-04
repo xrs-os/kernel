@@ -14,6 +14,8 @@ pub mod rootfs;
 pub mod util;
 pub mod vfs;
 
+use core::mem::MaybeUninit;
+
 use alloc::sync::Arc;
 pub use disk::Disk;
 pub use fs_str::{DirEntryName, FsStr, FsString};
@@ -29,12 +31,20 @@ pub mod mount_fs;
 pub type Inode = Arc<dyn mount_fs::DynInode>;
 pub type DirEntry = vfs::DirEntry<Arc<dyn mount_fs::DynFilesystem>>;
 
+static mut TTY: MaybeUninit<Arc<TtyInode>> = MaybeUninit::uninit();
+
+pub fn tty() -> &'static Arc<TtyInode> {
+    unsafe { TTY.assume_init_ref() }
+}
+
 pub fn init() {
     proc::executor::block_on(async move {
         rootfs::init(create_fs_inner().await);
         // mount device filesystem
+        unsafe { TTY = MaybeUninit::new(Arc::new(TtyInode::new())) };
+
         let dev_fs = Arc::new(devfs::DevFs::new(vec![
-            Arc::new(TtyInode::new()) as Arc<dyn devfs::DevInode>
+            tty().clone() as Arc<dyn devfs::DevInode>
         ]));
 
         let dev_dir = find_or_create_dev_dir()

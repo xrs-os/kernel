@@ -25,7 +25,7 @@ pub fn init_uart(node: &device_tree::Node) {
                 intc,
                 irq,
                 Box::new(|| {
-                    println!("getchar: {}", getchar());
+                    crate::fs::tty().push(getchar());
                 }),
             );
             let uart_base = PageParamA::linear_phys_to_virt(PhysicalAddress(addr));

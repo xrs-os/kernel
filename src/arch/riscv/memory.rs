@@ -29,6 +29,10 @@ pub const fn user_stack_offset() -> usize {
     consts::USER_STACK_OFFSET
 }
 
+pub const fn user_init_stack() -> VirtualAddress {
+    VirtualAddress(user_stack_offset())
+}
+
 pub const fn user_stack_size() -> usize {
     consts::USER_STACK_SIZE
 }

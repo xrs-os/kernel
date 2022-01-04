@@ -62,6 +62,7 @@ where
             _maker: PhantomData,
         }
     }
+    
     /// # Safety
     pub unsafe fn alloc_and_map(
         &mut self,
@@ -75,6 +76,7 @@ where
         ptr::copy(init_data.as_ptr(), addr.0 as *mut u8, init_data.len());
         Ok(flush_guard)
     }
+
     /// # Safety
     pub unsafe fn map(
         &mut self,

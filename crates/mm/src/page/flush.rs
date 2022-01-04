@@ -54,6 +54,10 @@ impl<Param: PageParam> FlushAllGuard<Param> {
             Param::flush_tlb(self.asid, None);
         }
     }
+
+    pub fn ignore(self) {
+        mem::forget(self)
+    }
 }
 
 impl<Param: PageParam> Drop for FlushAllGuard<Param> {

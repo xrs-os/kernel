@@ -7,16 +7,20 @@ use super::{
 use crate::{
     arch::memory::kernel_segments,
     config,
-    fs::{rootfs::root_fs, util::read_all, DirEntry, Inode, Path},
+    fs::{
+        rootfs::{self, root_fs},
+        util::read_all,
+        DirEntry, Inode, Path,
+    },
     mm::Mem,
     spinlock::{MutexIrq, RwLockIrq},
 };
 use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
-use core::mem::{self};
+use core::{mem, ptr::null};
 use mm::{
     arch::page::PageParam as PageParamA,
     memory::{MapType, Segment},
-    page::PageParam as _,
+    page::{flush::FlushAllGuard, PageParam as _},
     Addr, Result as MemoryResult, VirtualAddress,
 };
 use xmas_elf::{header, program, ElfFile};
@@ -83,8 +87,38 @@ impl Proc {
         cwd: DirEntry,
         init: bool,
         file: Inode,
+        args: Vec<String>,
+        envs: Vec<String>,
     ) -> Result<Arc<Self>> {
-        let bytes = read_all(file).await.map_err(|_fs_err| {
+        // Create main thread
+        let tid = tid::alloc().ok_or(Error::ThreadIdNotEnough)?;
+        let cmd: String = cmd.into();
+        let main_thread = Arc::new(Thread::new(tid, cmd.clone()));
+
+        let proc = Self::new(cmd, cwd, init, main_thread.clone())?;
+        {
+            let mut proc_mem = proc.memory.write();
+            Self::map_kernel_segments(&mut proc_mem);
+            proc_mem.activate();
+        }
+        unsafe { main_thread.init(proc.clone()).map_err(Error::MemoryErr)? };
+        proc.load_user_program(file, args, envs).await?;
+        Ok(proc)
+    }
+
+    fn map_kernel_segments(mem: &mut Mem) {
+        for segment in kernel_segments() {
+            mem.add_kernel_segment(segment).unwrap().ignore();
+        }
+    }
+
+    pub async fn load_user_program(
+        &self,
+        prog: Inode,
+        args: Vec<String>,
+        envs: Vec<String>,
+    ) -> Result<FlushAllGuard<PageParamA>> {
+        let bytes = read_all(prog).await.map_err(|_fs_err| {
             // TODO: trace log _fs_err
             Error::ElfErr("Failed to read elf file.")
         })?;
@@ -109,67 +143,48 @@ impl Proc {
             _ => return Err(Error::ElfErr("invalid ELF arch")),
         }
 
-        // entry point
-        let entry_point = elf.header.pt2.entry_point() as usize;
-
-        // Create main thread
-        let tid = tid::alloc().ok_or(Error::ThreadIdNotEnough)?;
-        let cmd: String = cmd.into();
-        let main_thread = Arc::new(Thread::new(
-            tid,
-            cmd.clone(),
-            VirtualAddress::new(entry_point),
-        ));
-
-        let proc = Self::new(cmd, cwd, init, main_thread.clone())?;
-        {
-            let mut proc_mem = proc.memory.write();
-            Self::map_kernel_segments(&mut proc_mem);
-            for ph in elf.program_iter() {
-                if ph.get_type() != Ok(program::Type::Load) {
-                    continue;
-                }
-                let start = VirtualAddress(ph.virtual_addr() as usize);
-                let size = ph.mem_size() as usize;
-                let data: &[u8] =
-                    if let program::SegmentData::Undefined(data) = ph.get_data(&elf).unwrap() {
-                        data
-                    } else {
-                        return Err(Error::ElfErr("unsupported elf format"));
-                    };
-
-                let mut flags = 0;
-                if ph.flags().is_read() {
-                    flags |= PageParamA::FLAG_PTE_READABLE;
-                }
-                if ph.flags().is_write() {
-                    flags |= PageParamA::FLAG_PTE_WRITEABLE;
-                }
-                if ph.flags().is_execute() {
-                    flags |= PageParamA::FLAG_PTE_EXECUTABLE;
-                }
-
-                proc_mem
-                    .add_segment(
-                        Segment {
-                            addr_range: start..(start.add(size)),
-                            flags: PageParamA::flag_set_user(flags),
-                            map_type: MapType::Framed,
-                        },
-                        data,
-                    )
-                    .map_err(Error::MemoryErr)?;
+        let mut mem = self.memory.write();
+        for ph in elf.program_iter() {
+            if ph.get_type() != Ok(program::Type::Load) {
+                continue;
             }
-        }
+            let start = VirtualAddress(ph.virtual_addr() as usize);
+            let size = ph.mem_size() as usize;
+            let data: &[u8] =
+                if let program::SegmentData::Undefined(data) = ph.get_data(&elf).unwrap() {
+                    data
+                } else {
+                    return Err(Error::ElfErr("unsupported elf format"));
+                };
 
-        unsafe { main_thread.init(proc.clone()).map_err(Error::MemoryErr)? };
-        Ok(proc)
-    }
-
-    fn map_kernel_segments(mem: &mut Mem) {
-        for segment in kernel_segments() {
-            mem.add_segment(segment, &[]).unwrap();
+            let mut flags = 0;
+            if ph.flags().is_read() {
+                flags |= PageParamA::FLAG_PTE_READABLE;
+            }
+            if ph.flags().is_write() {
+                flags |= PageParamA::FLAG_PTE_WRITEABLE;
+            }
+            if ph.flags().is_execute() {
+                flags |= PageParamA::FLAG_PTE_EXECUTABLE;
+            }
+            mem.add_user_segment(
+                Segment {
+                    addr_range: start..(start.add(size)),
+                    flags: PageParamA::flag_set_user(flags),
+                    map_type: MapType::Framed,
+                },
+                data,
+            )
+            .map_err(Error::MemoryErr)?
+            .ignore();
         }
+        let proc_init_info = ProcInitInfo {
+            args,
+            envs,
+            auxval: Auxval::from_elf(&elf),
+        };
+        self.main_thread.reset_context(&proc_init_info);
+        Ok(FlushAllGuard::new(Some(self.asid())))
     }
 
     pub fn fork(&self, asid: usize, main_thread: Arc<Thread>) -> MemoryResult<Self> {
@@ -210,6 +225,10 @@ impl Proc {
                 t.waker().wake();
             });
         // TODO: Handling sub-processes
+    }
+
+    fn asid(&self) -> usize {
+        *self.id() as usize
     }
 }
 
@@ -404,24 +423,126 @@ impl OpenFiles {
 
 pub fn create_init_proc() -> Arc<Proc> {
     // TODO trace error
-    let init_inode = executor::block_on(async {
-        match root_fs()
-            .find_parent_dentry(
-                &root_fs().root().await,
-                Path::from_bytes("/init".as_bytes()),
-            )
-            .await?
-        {
-            Some(direntry) => direntry.inode().await,
-            None => Ok(None),
-        }
-    })
-    .expect("Failed to load init proc")
-    .expect("init proc not exist. path: '/init'");
+    let init_inode = executor::block_on(rootfs::find_inode(Path::from_bytes("/init".as_bytes())))
+        .expect("Failed to load init proc")
+        .expect("init proc not exist. path: '/init'");
 
     // TODO trace error
     executor::block_on(async {
-        Proc::from_elf("/init", root_fs().root().await, true, init_inode).await
+        Proc::from_elf(
+            "/init",
+            root_fs().root().await,
+            true,
+            init_inode,
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
     })
     .expect("Field to create init proc")
+}
+
+pub struct ProcInitInfo {
+    pub args: Vec<String>,
+    pub envs: Vec<String>,
+    pub auxval: Auxval,
+}
+
+impl ProcInitInfo {
+    pub fn push_to_stack(&self, sp: VirtualAddress) -> VirtualAddress {
+        fn push_slice<T: Copy>(mut sp: usize, slice: &[T]) -> usize {
+            sp -= slice.len() * mem::size_of::<T>();
+            sp -= sp % mem::align_of::<T>();
+            unsafe { core::slice::from_raw_parts_mut(sp as *mut T, slice.len()) }
+                .copy_from_slice(slice);
+            sp
+        }
+        fn push_str(mut sp: usize, s: &str) -> usize {
+            sp = push_slice(sp, &['\0']);
+            push_slice(sp, s.as_bytes())
+        }
+        let mut sp = sp.inner();
+        let arg_ptrs = self
+            .args
+            .iter()
+            .map(|arg| {
+                sp = push_str(sp, arg);
+                sp
+            })
+            .collect::<Vec<_>>();
+
+        let env_ptrs = self
+            .envs
+            .iter()
+            .map(|env| {
+                sp = push_str(sp, env);
+                sp
+            })
+            .collect::<Vec<_>>();
+
+        // auxiliary vector entries
+        sp = push_slice(sp, &[null::<u8>(), null::<u8>()]);
+        self.auxval.as_abi_array().iter().for_each(|item| {
+            sp = push_slice(sp, item);
+        });
+
+        // envionment pointers
+        sp = push_slice(sp, &[null::<u8>()]);
+        sp = push_slice(sp, env_ptrs.as_slice());
+        // argv pointers
+        sp = push_slice(sp, &[null::<u8>()]);
+        sp = push_slice(sp, arg_ptrs.as_slice());
+        // argc
+        sp = push_slice(sp, &[arg_ptrs.len()]);
+        VirtualAddress(sp)
+    }
+}
+
+pub struct Auxval {
+    pub at_entry: u64,
+    pub at_phdr: u64,
+    pub at_phent: u16,
+    pub at_phnum: u16,
+}
+
+impl Auxval {
+    const AT_PHDR: u64 = 3;
+    const AT_PHENT: u64 = 4;
+    const AT_PHNUM: u64 = 5;
+    const AT_PAGESZ: u64 = 6;
+    const AT_ENTRY: u64 = 9;
+
+    fn from_elf(elf: &ElfFile) -> Self {
+        let phdr = if let Some(phdr) = elf
+            .program_iter()
+            .find(|ph| ph.get_type() == Ok(program::Type::Phdr))
+        {
+            // if phdr exists in program header, use it
+            Some(phdr.virtual_addr())
+        } else if let Some(elf_addr) = elf
+            .program_iter()
+            .find(|ph| ph.get_type() == Ok(program::Type::Load) && ph.offset() == 0)
+        {
+            // otherwise, check if elf is loaded from the beginning, then phdr can be inferred.
+            Some(elf_addr.virtual_addr() + elf.header.pt2.ph_offset())
+        } else {
+            None
+        };
+        Self {
+            at_entry: elf.header.pt2.entry_point(),
+            at_phdr: phdr.unwrap_or_default(),
+            at_phent: elf.header.pt2.ph_entry_size(),
+            at_phnum: elf.header.pt2.ph_count(),
+        }
+    }
+
+    fn as_abi_array(&self) -> [[u64; 2]; 5] {
+        return [
+            [Self::AT_PHDR, self.at_phdr],
+            [Self::AT_PHENT, self.at_phent as u64],
+            [Self::AT_PHNUM, self.at_phnum as u64],
+            [Self::AT_PAGESZ, PageParamA::PAGE_SIZE as u64],
+            [Self::AT_ENTRY, self.at_entry],
+        ];
+    }
 }

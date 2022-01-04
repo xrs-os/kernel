@@ -1,9 +1,12 @@
-use alloc::sync::Arc;
+use alloc::{string::String, sync::Arc, vec::Vec};
 
-use crate::proc::{
-    self,
-    executor::spawn,
-    thread::{thread_future, Thread},
+use crate::{
+    fs::{self, rootfs},
+    proc::{
+        self,
+        executor::spawn,
+        thread::{thread_future, Thread},
+    },
 };
 
 use super::{Error, Result};
@@ -24,6 +27,28 @@ pub fn sys_fork(thread: &Arc<Thread>) -> Result {
 
 pub fn sys_exit(thread: &Arc<Thread>, status: isize) -> Result {
     thread.exit(status);
+    Ok(0)
+}
+
+pub async fn sys_execve(
+    thread: &Arc<Thread>,
+    path: &fs::Path,
+    argv: Vec<String>,
+    envp: Vec<String>,
+) -> Result {
+    // kill all old threads
+    thread.proc().exit(0);
+
+    let inode = rootfs::find_inode(path)
+        .await
+        .map_err::<Error, _>(Into::into)?
+        .ok_or(Error::ENOENT)?;
+    thread
+        .proc()
+        .load_user_program(inode, argv, envp)
+        .await
+        .map_err::<Error, _>(Into::into)?;
+
     Ok(0)
 }
 
