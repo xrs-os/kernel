@@ -57,7 +57,7 @@ pub fn sys_exit(status: isize) -> ! {
 }
 
 #[allow(dead_code)]
-pub fn sys_openat(dirfd: isize, path: &str, flags: usize, mode: u16) -> isize {
+pub fn sys_openat(dirfd: isize, path: &[u8], flags: usize, mode: u16) -> isize {
     unsafe {
         syscall4(
             SyscallNum::Openat,

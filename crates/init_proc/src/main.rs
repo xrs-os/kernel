@@ -13,7 +13,7 @@ const AT_FDCWD: isize = -100;
 
 #[allow(clippy::empty_loop)]
 pub fn main() {
-    let tty = sys_openat(AT_FDCWD, "/dev/tty", 2, 0);
+    let tty = sys_openat(AT_FDCWD, b"/dev/tty\0", 2, 0);
     sys_write(tty, "hello world".as_bytes());
     loop {}
 }

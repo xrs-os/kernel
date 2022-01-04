@@ -161,7 +161,7 @@ extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
             external_handler();
             Trap::Interrupt
         }
-        scause::Trap::Interrupt(scause::Interrupt::UserExternal) => Trap::Syscall,
+        scause::Trap::Exception(scause::Exception::UserEnvCall) => Trap::Syscall,
         _ => Trap::Other,
     }))
 }
@@ -185,6 +185,7 @@ extern "C" fn kernel_trap_handler(_ctx: &mut Context) {
 
 fn external_handler() {
     let irq_num = unsafe { plic().plic_claim() };
+    crate::println!("external_handler: {}", irq_num);
     if let Some(ack_fn) = driver::driver_irq_ack_fn(&irq_num) {
         ack_fn();
     }

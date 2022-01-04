@@ -19,7 +19,7 @@ impl Path {
     }
 
     pub fn is_absolute(&self) -> bool {
-        self.0.as_bytes()[0] == b'/'
+        !self.0.is_empty() && self.0.as_bytes()[0] == b'/'
     }
 
     pub fn shift(&self) -> (&Self, Option<&FsStr>) {

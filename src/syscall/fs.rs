@@ -130,6 +130,7 @@ pub async fn sys_openat(
     } else {
         lookup_inode_at(thread, dirfd, path).await?
     };
+
     let descriptor = file::Descriptor::new(inode, flags.into(), flags.contains(OpenFlags::CLOEXEC));
     let fd = thread
         .proc()
@@ -241,6 +242,7 @@ pub async fn lookup_inode_at(
             .ok_or(Error::EBADF)?
             .inode
     };
+
     if !path.is_empty() {
         inode = root_fs()
             .find(&inode, path)

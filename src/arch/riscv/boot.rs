@@ -17,7 +17,7 @@ extern "C" {
 extern "C" fn boot(hartid: usize, dtb_pa: usize) -> ! {
     // Write hartid to tp register for cpu_id()
     unsafe { asm!("mv tp, {}", in(reg) hartid) };
-    //  Allow kernel access to user pages
+    // Allow kernel access to user pages
     unsafe { riscv::register::sstatus::set_sum() };
     kmain(hartid, dtb_pa);
     unreachable!();
