@@ -161,7 +161,7 @@ impl Inode {
     fn lookup_raw<'a>(&'a self, name: &'a super::FsStr) -> vfs::Result<Option<vfs::RawDirEntry>> {
         let inner = self.inner.read();
         match &inner.content {
-            Content::Dir(dentrys) => Ok(dentrys.get(name).map(|dentry| vfs::RawDirEntry {
+            Content::Dir(dentries) => Ok(dentries.get(name).map(|dentry| vfs::RawDirEntry {
                 inode_id: dentry.inode_id,
                 name: Box::new(DirEntryName::from(name)),
                 file_type: Some(dentry.file_type.clone()),
@@ -178,7 +178,7 @@ impl Inode {
     ) -> vfs::Result<()> {
         let mut inner = self.inner.write();
         match &mut inner.content {
-            Content::Dir(dentrys) => dentrys
+            Content::Dir(dentries) => dentries
                 .try_insert(
                     dir_entry_name,
                     DirEntry {
@@ -339,8 +339,8 @@ impl vfs::Inode for Arc<Inode> {
     fn remove<'a>(&'a self, dir_entry_name: &'a super::FsStr) -> Self::RemoveFut<'a> {
         let mut inner = self.inner.write();
         future::ready(match &mut inner.content {
-            Content::Dir(dentrys) => {
-                if let Some(dentry) = dentrys.remove(dir_entry_name) {
+            Content::Dir(dentries) => {
+                if let Some(dentry) = dentries.remove(dir_entry_name) {
                     Inode::unlink(&RamFs::load_inode(&self.fs, dentry.inode_id).unwrap()).map(
                         |_| {
                             Some(vfs::RawDirEntry {
@@ -361,7 +361,7 @@ impl vfs::Inode for Arc<Inode> {
     fn ls_raw(&self) -> Self::LsRawFut<'_> {
         let inner = self.inner.read();
         future::ready(match &inner.content {
-            Content::Dir(dentrys) => Ok(dentrys.iter().map(Into::into).collect()),
+            Content::Dir(dentries) => Ok(dentries.iter().map(Into::into).collect()),
             Content::File(_) => Err(vfs::Error::NotDir),
         })
     }
@@ -370,7 +370,7 @@ impl vfs::Inode for Arc<Inode> {
         let inner = self.inner.read();
 
         future::ready(match &inner.content {
-            Content::Dir(dentrys) => Ok(dentrys
+            Content::Dir(dentries) => Ok(dentries
                 .iter()
                 .map(|entry| vfs::DirEntry {
                     raw: entry.into(),

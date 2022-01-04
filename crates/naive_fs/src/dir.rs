@@ -168,16 +168,16 @@ where
 
         let dir_entry_stream = self.dir_entry_stream();
         pin_mut!(dir_entry_stream);
-        let mut dentrys = Vec::new();
+        let mut dentries = Vec::new();
         loop {
             match dir_entry_stream.next().await {
-                Some(Ok((dir_entry, _))) => dentrys.push(dir_entry),
+                Some(Ok((dir_entry, _))) => dentries.push(dir_entry),
                 Some(Err(e)) => return Err(e),
                 None => break,
             }
         }
 
-        Ok(dentrys)
+        Ok(dentries)
     }
 
     fn dir_entry_stream(&self) -> impl Stream<Item = Result<(RawDirEntry, u32)>> + '_ {

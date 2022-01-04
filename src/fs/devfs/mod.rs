@@ -187,7 +187,7 @@ impl vfs::Inode for Arc<dyn DevInode> {
 }
 
 pub struct DevRootInode {
-    dir_entrys: BTreeMap<DirEntryName, vfs::RawDirEntry>,
+    dir_entries: BTreeMap<DirEntryName, vfs::RawDirEntry>,
 }
 
 impl DevInode for DevRootInode {
@@ -226,12 +226,12 @@ impl DevInode for DevRootInode {
         &'a self,
         name: &'a super::FsStr,
     ) -> BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>> {
-        Box::pin(ready(Ok(self.dir_entrys.get(name).map(Clone::clone))))
+        Box::pin(ready(Ok(self.dir_entries.get(name).map(Clone::clone))))
     }
 
     fn ls_raw(&self) -> BoxFuture<vfs::Result<Vec<vfs::RawDirEntry>>> {
         Box::pin(ready(Ok(self
-            .dir_entrys
+            .dir_entries
             .iter()
             .map(|(_, x)| x.clone())
             .collect())))

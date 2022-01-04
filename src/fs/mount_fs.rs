@@ -561,8 +561,8 @@ impl<InnerFs: vfs::Filesystem + 'static> DynInode for MInode<InnerFs> {
 
     fn ls(&self) -> BoxFuture<'_, vfs::Result<Vec<vfs::DirEntry<Arc<dyn DynFilesystem>>>>> {
         Box::pin(
-            vfs::Inode::ls_raw(&self.inner).map_ok(move |raw_dir_entrys| {
-                raw_dir_entrys
+            vfs::Inode::ls_raw(&self.inner).map_ok(move |raw_dir_entries| {
+                raw_dir_entries
                     .into_iter()
                     .map(
                         |raw_dir_entry| match self.mfs.get_mountpoint(raw_dir_entry.inode_id) {

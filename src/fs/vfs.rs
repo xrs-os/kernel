@@ -471,7 +471,7 @@ pub trait Inode: Send + Sync {
 
     fn ls_raw(&self) -> Self::LsRawFut<'_>;
 
-    /// List all dir entrys in the current directory
+    /// List all dir entries in the current directory
     fn ls(&self) -> Self::LsFut<'_>;
 
     /// Call filesystem specific ioctl methods
