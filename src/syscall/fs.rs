@@ -235,7 +235,7 @@ pub async fn lookup_inode_at(
 ) -> core::result::Result<fs::Inode, Error> {
     let proc = thread.proc();
     let mut inode = if dirfd == AT_FDCWD {
-        proc.cwd.read().inode().await?.ok_or(Error::ENOENT)?
+        proc.cwd.read().await.inode().await?.ok_or(Error::ENOENT)?
     } else {
         proc.open_files
             .get_file(dirfd as usize)

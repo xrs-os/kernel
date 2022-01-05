@@ -130,13 +130,14 @@ impl Thread {
         ctx.set_init_stack(sp);
     }
 
-    pub fn fork(self: &Arc<Thread>, new_inner: ThreadInner) -> Result<Self> {
+    pub async fn fork(self: &Arc<Thread>, new_inner: ThreadInner) -> Result<Self> {
         let tid = tid::alloc().ok_or(Error::ThreadIdNotEnough)?;
 
         Ok(Self {
             proc: MaybeUninit::new(Arc::new(
                 self.proc()
                     .fork(*tid.id() as usize, self.clone())
+                    .await
                     .map_err(Error::MemoryErr)?,
             )),
             cmd: self.cmd.clone(),

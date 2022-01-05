@@ -144,8 +144,6 @@ pub unsafe fn wfi() {
 
 #[export_name = "_user_trap_handler"]
 extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
-    // crate::println!("----- trap from user -----");
-
     let scause = scause::read();
     let _stval = stval::read();
     // crate::println!("ucause: {:?}", scause.cause());

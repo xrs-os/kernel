@@ -43,7 +43,7 @@ pub struct Proc {
     pub threads: RwLockIrq<BTreeMap<tid::RawThreadId, Arc<Thread>>>,
     cmd: String,
     // Current working directory
-    pub cwd: RwLockIrq<DirEntry>,
+    pub cwd: crate::sleeplock::RwLock<DirEntry>,
     pub open_files: OpenFiles,
     pub memory: RwLockIrq<Mem>,
     signal: MutexIrq<Signal>,
@@ -75,7 +75,7 @@ impl Proc {
             children: RwLockIrq::new(BTreeMap::new()),
             threads: RwLockIrq::new(threads),
             cmd: cmd.into(),
-            cwd: RwLockIrq::new(cwd),
+            cwd: crate::sleeplock::RwLock::new(cwd),
             open_files: OpenFiles::new(),
             memory: RwLockIrq::new(memory),
             signal: MutexIrq::new(signal),
@@ -187,7 +187,7 @@ impl Proc {
         Ok(FlushAllGuard::new(Some(self.asid())))
     }
 
-    pub fn fork(&self, asid: usize, main_thread: Arc<Thread>) -> MemoryResult<Self> {
+    pub async fn fork(&self, asid: usize, main_thread: Arc<Thread>) -> MemoryResult<Self> {
         Ok(Self {
             id: *main_thread.id(),
             main_thread,
@@ -196,7 +196,7 @@ impl Proc {
             children: RwLockIrq::new(BTreeMap::new()),
             threads: RwLockIrq::new(BTreeMap::new()),
             cmd: self.cmd.clone(),
-            cwd: RwLockIrq::new(self.cwd.read().clone()),
+            cwd: crate::sleeplock::RwLock::new(self.cwd.read().await.clone()),
             open_files: self.open_files.clone(),
             memory: RwLockIrq::new(self.memory.read().borrow_memory(asid)?),
             signal: MutexIrq::new(self.signal.lock().fork()),

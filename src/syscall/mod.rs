@@ -123,7 +123,7 @@ pub async fn syscall(thread: &Arc<Thread>) {
             .await
         },
         SYS_EXIT => sys_exit(thread, syscall_args[0] as isize),
-        SYS_CLONE => sys_fork(thread),
+        SYS_CLONE => sys_fork(thread).await,
         _ => Err(Error::ENOSYS),
     };
 
