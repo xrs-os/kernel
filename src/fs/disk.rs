@@ -44,6 +44,7 @@ impl Disk {
     /// Write a buffer into this disk, returning how many bytes were written.
     pub fn write_at<'a>(&'a self, offset: u64, src: &'a [u8]) -> WriteAtFut<'a> {
         assert!(!src.is_empty(), "src must not be empty");
+
         WriteAtFut {
             phy_blk_device: &self.phy_blk_device,
             write_space: PhySpace::calc(
@@ -420,11 +421,11 @@ impl<'a, const HEAD_OR_TAIL: bool> Future for WritePartialBlkFut<'a, HEAD_OR_TAI
                 WritePartialBlkStateProj::ReadBlk(read_fut) => {
                     ready!(read_fut.poll(cx)?);
                     if HEAD_OR_TAIL {
-                        (&mut this.blk_data[..this.src.len()]).copy_from_slice(this.src);
-                    } else {
                         let blk_data_len = this.blk_data.len();
                         (&mut this.blk_data[blk_data_len - this.src.len()..])
                             .copy_from_slice(this.src);
+                    } else {
+                        (&mut this.blk_data[..this.src.len()]).copy_from_slice(this.src);
                     }
 
                     WritePartialBlkState::WriteBlk(

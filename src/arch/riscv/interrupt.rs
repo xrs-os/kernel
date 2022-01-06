@@ -183,7 +183,6 @@ extern "C" fn kernel_trap_handler(_ctx: &mut Context) {
 
 fn external_handler() {
     let irq_num = unsafe { plic().plic_claim() };
-    crate::println!("external_handler: {}", irq_num);
     if let Some(ack_fn) = driver::driver_irq_ack_fn(&irq_num) {
         ack_fn();
     }
@@ -215,7 +214,7 @@ fn set_next_timer_interrupt() {
             }
         }
     }
-    sbi::set_timer(get_cycle() + 9650000);
+    sbi::set_timer(get_cycle() + 965000);
 }
 
 /// Enable external interrupt

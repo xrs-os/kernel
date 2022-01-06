@@ -173,7 +173,6 @@ where
 {
     pub async fn open(disk: DK, read_only: bool) -> Result<NaiveFs<MutexType, DK>> {
         let (super_blk, blk_device) = SuperBlk::load(disk, read_only).await?;
-
         Ok(Self {
             super_blk,
             blk_device,
@@ -194,7 +193,7 @@ where
             inodes_count,
             blks_count,
             blk_size_log2: fs_blk_size.blk_size_log2,
-            on_error: super_blk::OnError::MountAsRo,
+            on_error: super_blk::OnError::MountAsRo as u16,
             uuid: volume_uuid,
             volume_name,
             prealloc_blocks: 1,
@@ -294,4 +293,11 @@ where
     pub fn blk_count(&self) -> usize {
         self.super_blk().raw_super_blk.blks_count as usize
     }
+}
+
+#[macro_export]
+macro_rules! div_round_up {
+    ($n:expr, $d:expr) => {
+        ($n + ($d - 1)) / $d
+    };
 }

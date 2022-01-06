@@ -421,12 +421,12 @@ impl From<naive_fs::DirEntryName> for DirEntryName {
 impl From<naive_fs::RawDirEntry> for vfs::RawDirEntry {
     fn from(naive_raw_dir_entry: naive_fs::RawDirEntry) -> Self {
         let inode_id = naive_raw_dir_entry.inode_id as vfs::InodeId;
-        let file_type = Some(naive_raw_dir_entry.file_type.into());
+        let file_type = naive_fs::dir::FileType::from_primitive(naive_raw_dir_entry.file_type);
         let name_len = naive_raw_dir_entry.name_len;
         vfs::RawDirEntry {
             inode_id,
             name: Box::new(DirEntryName::new(naive_raw_dir_entry.raw_name(), name_len)),
-            file_type,
+            file_type: file_type.map(Into::into),
         }
     }
 }

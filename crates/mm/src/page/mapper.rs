@@ -62,7 +62,7 @@ where
             _maker: PhantomData,
         }
     }
-    
+
     /// # Safety
     pub unsafe fn alloc_and_map(
         &mut self,

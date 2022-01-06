@@ -3,25 +3,44 @@
 #[macro_use]
 extern crate alloc;
 
-use core::mem;
+use core::{convert::TryInto, mem};
 
-use alloc::{boxed::Box, slice, vec::Vec};
+use alloc::{boxed::Box, vec::Vec};
+
+macro_rules! div_round_up {
+    ($n:expr, $d:expr) => {
+        ($n + ($d - 1)) / $d
+    };
+}
 
 pub struct Bitmap(Box<[u64]>);
 
 impl Bitmap {
     pub fn new(nbits: u32) -> Self {
-        let size = div_round_up(nbits, u64::BITS);
+        let size = div_round_up!(nbits, u64::BITS);
         Self(vec![0; size as usize].into())
     }
 
-    pub fn as_slice<T>(&self) -> &[T] {
-        let ratio = mem::size_of::<u64>() / mem::size_of::<T>();
-        unsafe { slice::from_raw_parts(self.0.as_ptr() as *const T, self.0.len() * ratio) }
+    pub fn to_bytes_be(&self, out: &mut [u8]) {
+        let mut offset = 0;
+        for row in &*self.0 {
+            let row_be = row.to_be_bytes();
+            out[offset..offset + row_be.len()].copy_from_slice(&row_be);
+            offset += row_be.len();
+        }
+    }
+
+    pub fn from_bytes_be(bytes: &[u8]) -> Self {
+        let ratio = mem::size_of::<u64>() / mem::size_of::<u8>();
+        let mut data: Vec<u64> = Vec::with_capacity(div_round_up!(bytes.len(), ratio));
+        for b in bytes.chunks(ratio) {
+            data.push(u64::from_be_bytes(b.try_into().unwrap()));
+        }
+        Self(data.into())
     }
 
     pub fn capacity(&self) -> u32 {
-        (self.0.len() * mem::size_of::<u64>()) as u32
+        self.0.len() as u32 * u64::BITS
     }
 
     /// Returns the bit of the `offset` position.
@@ -63,7 +82,7 @@ impl Bitmap {
         }
 
         if next_zero.is_none() {
-            for i in div_round_up(offset, u64::BITS)..self.0.len() as u32 {
+            for i in div_round_up!(offset, u64::BITS)..self.0.len() as u32 {
                 let num = unsafe { *self.0.get_unchecked(i as usize) };
                 if num == 0 {
                     next_zero = Some(i * u64::BITS);
@@ -86,33 +105,6 @@ impl Bitmap {
     fn bit_mask(offset: u32) -> u64 {
         (1 << (u64::BITS - 1)) >> (offset & (u64::BITS - 1))
     }
-}
-
-impl From<Vec<u8>> for Bitmap {
-    fn from(mut data: Vec<u8>) -> Self {
-        let ratio = (mem::size_of::<u64>() / mem::size_of::<u8>()) as u32;
-        unsafe {
-            let vec_u64 = Vec::from_raw_parts(
-                data.as_mut_ptr() as *mut u64,
-                div_round_up(data.len() as u32, ratio) as usize,
-                div_round_up(data.capacity() as u32, ratio) as usize,
-            )
-            .into_boxed_slice();
-            // Don't destructing the original Vec<u8>
-            mem::forget(data);
-            Self(vec_u64)
-        }
-    }
-}
-
-impl From<Vec<u64>> for Bitmap {
-    fn from(data: Vec<u64>) -> Self {
-        Self(data.into())
-    }
-}
-
-const fn div_round_up(n: u32, d: u32) -> u32 {
-    (n + (d - 1)) / d
 }
 
 #[cfg(test)]

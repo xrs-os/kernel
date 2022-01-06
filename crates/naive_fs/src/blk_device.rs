@@ -1,10 +1,9 @@
-use crate::{Addr, BlkSize, Error, Result};
+use crate::{div_round_up, Addr, BlkSize, Error, Result};
 use alloc::{boxed::Box, vec::Vec};
 use core::{
     any::Any,
     future::{ready, Future, Ready},
-    mem::{self, MaybeUninit},
-    slice,
+    mem, slice,
 };
 use future_ext::{WithArg1, WithArg1Ext};
 use futures_util::{
@@ -15,6 +14,20 @@ use futures_util::{
 pub type DiskError = Box<dyn Any + Send>;
 
 pub type DiskResult<T> = core::result::Result<T, DiskError>;
+
+pub trait FromBytes {
+    const BYTES_LEN: usize;
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized;
+}
+
+pub trait ToBytes {
+    fn bytes_len(&self) -> usize;
+
+    fn to_bytes(&self, out: &mut [u8]);
+}
 
 pub trait Disk {
     type ReadAtFut<'a>: Future<Output = DiskResult<u32>> + Send + 'a;
@@ -30,26 +43,21 @@ pub trait Disk {
     fn capacity(&self) -> u32;
 }
 
-pub(crate) async fn read_val_at<DK: Disk, T>(disk: &DK, offset: u32) -> DiskResult<T> {
-    #[allow(clippy::uninit_assumed_init)]
-    let mut ret: T = unsafe { mem::MaybeUninit::uninit().assume_init() };
-    let buf =
-        unsafe { slice::from_raw_parts_mut((&mut ret) as *mut _ as *mut u8, mem::size_of::<T>()) };
-    disk.read_at(offset, buf).await?;
-    Ok(ret)
+pub(crate) async fn read_val_at<DK: Disk, T: FromBytes>(disk: &DK, offset: u32) -> DiskResult<T> {
+    let mut bytes = vec![0; T::BYTES_LEN];
+    disk.read_at(offset, &mut bytes).await?;
+    Ok(T::from_bytes(&bytes).unwrap())
 }
 
 pub type ReadAtFut<'a, DK> = MapErr<<DK as Disk>::ReadAtFut<'a>, fn(DiskError) -> Error>;
 
-pub type ReadSliceFut<'a, DK> = MapOk<ReadAtFut<'a, DK>, fn(u32) -> u32>;
-
-pub type ReadValAtFut<'a, T, DK> = Map<
-    WithArg1<ReadAtFut<'a, DK>, Box<MaybeUninit<T>>>,
-    fn((Result<u32>, Box<MaybeUninit<T>>)) -> Result<T>,
->;
+pub type ReadValAtFut<'a, T, DK> =
+    Map<WithArg1<ReadAtFut<'a, DK>, Vec<u8>>, fn((Result<u32>, Vec<u8>)) -> Result<T>>;
 
 type WriteAtFut<'a, DK> = MapErr<<DK as Disk>::WriteAtFut<'a>, fn(DiskError) -> Error>;
 
+pub type ReadBytesFut<'a, DK> =
+    Map<WithArg1<ReadAtFut<'a, DK>, Vec<u8>>, fn((Result<u32>, Vec<u8>)) -> Result<Vec<u8>>>;
 /// Logic block devices
 pub struct BlkDevice<DK> {
     disk: DK,
@@ -68,43 +76,57 @@ impl<DK: Disk> BlkDevice<DK> {
 
     /// Reads block device data by byte
     /// and returns the number of bytes of data read
-    pub fn read_at<'a>(
-        &'a self,
-        addr: Addr,
-        buf: &'a mut [u8],
-    ) -> MapErr<DK::ReadAtFut<'a>, fn(DiskError) -> Error> {
+    pub fn read_at<'a>(&'a self, addr: Addr, buf: &'a mut [u8]) -> ReadAtFut<'a, DK> {
         let Self { disk, blk_size, .. } = self;
         disk.read_at(addr.abs_offset(*blk_size), buf)
             .map_err(Error::DiskError)
     }
 
-    /// Reads block device data by `T` type slice,
-    /// returning the number of `T` type elements read
-    pub fn read_slice<'a, T>(&'a self, addr: Addr, buf: &'a mut [T]) -> ReadSliceFut<'a, DK> {
-        let buf_u8 = unsafe {
-            slice::from_raw_parts_mut(buf as *mut _ as *mut u8, mem::size_of::<T>() * buf.len())
-        };
-        self.read_at(addr, buf_u8)
-            .map_ok(|read_u8_len| read_u8_len / mem::size_of::<T>() as u32)
+    /// Read bytes data from block device,
+    /// actual read length may be less than `len`
+    pub fn read_bytes<'a>(&'a self, addr: Addr, len: u32) -> ReadBytesFut<'a, DK> {
+        let mut ret = vec![0; len as usize];
+
+        self.read_at(addr, unsafe {
+            slice::from_raw_parts_mut(ret.as_mut_ptr(), ret.len())
+        })
+        .with_arg1(ret)
+        .map(|(read_len_res, mut ret)| {
+            read_len_res.map(|read_len| {
+                unsafe { ret.set_len(read_len as usize) };
+                ret
+            })
+        })
     }
 
     /// Read `len` of `T` type data from block device,
     /// actual read length may be less than `len`
-    pub async fn read_vec<'a, T: 'a>(&'a self, addr: Addr, len: u32) -> Result<Vec<T>> {
-        let mut ret = Vec::with_capacity(len as usize);
-        unsafe { ret.set_len(len as usize) };
-        let read_len = self.read_slice(addr, ret.as_mut_slice()).await?;
-        unsafe { ret.set_len(read_len as usize) };
-        Ok(ret)
+    pub fn read_vec<'a, T: FromBytes>(
+        &'a self,
+        addr: Addr,
+        len: u32,
+    ) -> MapOk<ReadBytesFut<'a, DK>, fn(Vec<u8>) -> Vec<T>> {
+        let ratio = T::BYTES_LEN / mem::size_of::<u8>();
+        self.read_bytes(addr, len * ratio as u32).map_ok(|bytes| {
+            let ratio = T::BYTES_LEN / mem::size_of::<u8>();
+            let mut ret = Vec::with_capacity(div_round_up!(bytes.len(), ratio));
+            for item_bytes in bytes.chunks(ratio) {
+                match T::from_bytes(item_bytes) {
+                    Some(item) => ret.push(item),
+                    None => break,
+                }
+            }
+            ret
+        })
     }
 
-    pub fn read_val_at<T>(&self, addr: Addr) -> ReadValAtFut<T, DK> {
-        let mut val: Box<MaybeUninit<T>> = Box::new_uninit();
-        let buf =
-            unsafe { slice::from_raw_parts_mut(val.as_mut_ptr() as *mut u8, mem::size_of::<T>()) };
-        self.read_at(addr, buf)
-            .with_arg1(val)
-            .map(|(res, val)| res.map(|_| *unsafe { val.assume_init() }))
+    pub fn read_val_at<T: FromBytes>(&self, addr: Addr) -> ReadValAtFut<T, DK> {
+        let mut bytes = vec![0; T::BYTES_LEN];
+        self.read_at(addr, unsafe {
+            slice::from_raw_parts_mut(bytes.as_mut_ptr(), bytes.len())
+        })
+        .with_arg1(bytes)
+        .map(|(res, bytes)| res.map(|_| T::from_bytes(&bytes).unwrap()))
     }
 
     pub fn write_at<'a>(
@@ -120,36 +142,57 @@ impl<DK: Disk> BlkDevice<DK> {
         if *read_only {
             return Either::Left(ready(Err(Error::ReadOnly)));
         }
-
         Either::Right(
             disk.write_at(addr.abs_offset(*blk_size), buf)
                 .map_err(Error::DiskError),
         )
     }
 
-    pub fn write_slice<'a, T>(
-        &'a self,
-        addr: Addr,
-        buf: &'a [T],
-    ) -> Either<Ready<Result<u32>>, WriteAtFut<'a, DK>> {
-        let buf_u8 = unsafe {
-            slice::from_raw_parts(
-                buf as *const _ as *const u8,
-                mem::size_of::<T>() * buf.len(),
-            )
-        };
-        self.write_at(addr, buf_u8)
-    }
-
     #[allow(clippy::type_complexity)]
-    pub fn write_value_at<'a, T>(
+    pub fn write_value_at<'a, T: ToBytes>(
         &'a self,
         addr: Addr,
         val: &'a T,
-    ) -> MapOk<Either<Ready<Result<u32>>, WriteAtFut<'a, DK>>, fn(u32) -> ()> {
-        let buf =
-            unsafe { slice::from_raw_parts(val as *const _ as *const u8, mem::size_of::<T>()) };
-        self.write_at(addr, buf).map_ok(|_| ())
+    ) -> Map<
+        WithArg1<Either<Ready<Result<u32>>, WriteAtFut<'a, DK>>, Vec<u8>>,
+        fn((Result<u32>, Vec<u8>)) -> Result<()>,
+    > {
+        let mut bytes = vec![0; val.bytes_len()];
+        val.to_bytes(&mut bytes);
+        self.write_at(addr, unsafe {
+            slice::from_raw_parts(bytes.as_ptr(), bytes.len())
+        })
+        .with_arg1(bytes)
+        .map(|(res, _)| res.map(|_| ()))
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn write_slice<'a, T: ToBytes>(
+        &'a self,
+        addr: Addr,
+        slice: &'a [T],
+    ) -> Map<
+        WithArg1<Either<Ready<Result<u32>>, WriteAtFut<'a, DK>>, Vec<u8>>,
+        fn((Result<u32>, Vec<u8>)) -> Result<u32>,
+    > {
+        let mut bytes_buf = if slice.is_empty() {
+            Vec::new()
+        } else {
+            let item_byte_len = slice[0].bytes_len();
+            let mut bytes_buf = vec![0; slice.len() * item_byte_len];
+            let mut offset = 0;
+            for item in slice {
+                item.to_bytes(&mut bytes_buf[offset..offset + item_byte_len]);
+                offset += item_byte_len;
+            }
+            bytes_buf
+        };
+
+        self.write_at(addr, unsafe {
+            slice::from_raw_parts_mut(bytes_buf.as_mut_ptr(), bytes_buf.len())
+        })
+        .with_arg1(bytes_buf)
+        .map(|(res, _)| res)
     }
 
     pub fn disk(&self) -> &DK {

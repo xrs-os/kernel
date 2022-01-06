@@ -2,6 +2,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use futures_util::future;
 
+use crate::blk_device::ToBytes;
+
 use super::{
     blk_device::{BlkDevice, Disk},
     Addr, BoxFuture, Result,
@@ -33,7 +35,7 @@ impl<T> MaybeDirty<T> {
 
     pub async fn sync<'a, DK>(&'a self, blk_device: &'a BlkDevice<DK>) -> Result<()>
     where
-        T: Syncable,
+        T: Syncable + ToBytes,
         DK: Disk + Sync,
     {
         if self.is_dirty() {

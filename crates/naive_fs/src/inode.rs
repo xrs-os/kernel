@@ -1,14 +1,15 @@
-use core::{iter::once, mem, ops::Range};
+use core::{convert::TryInto, iter::once, ops::Range};
 
 use crate::{
-    blk_device::{self, Disk},
+    blk_device::{self, Disk, FromBytes, ToBytes},
     consts,
     maybe_dirty::{MaybeDirty, Syncable},
     scoped,
     super_blk::SuperBlk,
     Addr, BlkDevice, BlkId, BlkSize, Error, InodeId, NaiveFs, Result,
 };
-use alloc::{boxed::Box, slice, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use byte_struct::*;
 use futures_util::{
     future::{BoxFuture, Map},
     FutureExt,
@@ -19,7 +20,8 @@ use future_ext::{WithArg2, WithArg2Ext};
 use sleeplock::RwLock;
 
 /// RawInode
-#[repr(C, packed)]
+#[derive(ByteStruct)]
+#[byte_struct_le]
 pub struct RawInode {
     pub mode: Mode,
     /// user id associated with the file.
@@ -50,6 +52,27 @@ pub struct RawInode {
 }
 
 impl Syncable for RawInode {}
+
+impl FromBytes for RawInode {
+    const BYTES_LEN: usize = Self::BYTE_LEN;
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Some(Self::read_bytes(bytes))
+    }
+}
+
+impl ToBytes for RawInode {
+    fn to_bytes(&self, out: &mut [u8]) {
+        self.write_bytes(out);
+    }
+
+    fn bytes_len(&self) -> usize {
+        Self::BYTE_LEN
+    }
+}
 
 impl Default for RawInode {
     fn default() -> Self {
@@ -86,6 +109,8 @@ impl RawInode {
 }
 
 bitflags! {
+    #[derive(ByteStruct)]
+    #[byte_struct_le]
     pub struct Mode: u16 {
         // File type
         /// Socket File
@@ -283,7 +308,6 @@ where
 
     pub async fn read_at(&self, offset: u32, mut buf: &mut [u8]) -> Result<u32> {
         let inode_size = self.raw.read().await.size;
-
         if offset >= inode_size {
             return Ok(0);
         }
@@ -313,18 +337,13 @@ where
         Ok(read_len)
     }
 
-    pub async fn read<T>(&self, offset: u32) -> Result<Option<T>> {
-        #[allow(clippy::uninit_assumed_init)]
-        let mut ret: T = unsafe { mem::MaybeUninit::uninit().assume_init() };
-        let buf = unsafe {
-            slice::from_raw_parts_mut((&mut ret) as *mut _ as *mut u8, mem::size_of::<T>())
-        };
-        let read_size = self.read_at(offset, buf).await?;
-
-        if read_size < mem::size_of::<T>() as u32 {
+    pub async fn read<T: FromBytes>(&self, offset: u32) -> Result<Option<T>> {
+        let mut bytes = vec![0; T::BYTES_LEN];
+        let read_size = self.read_at(offset, &mut bytes).await?;
+        if read_size < T::BYTES_LEN as u32 {
             Ok(None)
         } else {
-            Ok(Some(ret))
+            Ok(Some(T::from_bytes(&bytes).unwrap()))
         }
     }
 
@@ -342,17 +361,17 @@ where
             write_offset = next_offset;
         }
 
-        let inode_size = self.raw.read().await.size;
-        if offset + write_len > inode_size {
-            self.raw.write().await.size = offset + write_len;
+        let mut raw = self.raw.write().await;
+        if offset + write_len > raw.size {
+            raw.size = offset + write_len;
         }
         Ok(write_len)
     }
 
-    pub async fn write<T>(&self, offset: u32, val: &T) -> Result<()> {
-        let buf =
-            unsafe { slice::from_raw_parts(val as *const _ as *const u8, mem::size_of::<T>()) };
-        self.write_at(offset, buf).await?;
+    pub async fn write<T: ToBytes>(&self, offset: u32, val: &T) -> Result<()> {
+        let mut buf = vec![0; val.bytes_len()];
+        val.to_bytes(&mut buf);
+        self.write_at(offset, &buf).await?;
         Ok(())
     }
 
@@ -461,9 +480,9 @@ where
             .div_round_up_by(first_blk_offset + len)
             .min(self.super_blk().blk_ids_count_pre_blk - nth_blk);
 
-        let mut indirect_blks: Vec<u16> = blk_device
+        let mut indirect_blks: Vec<BlkId> = blk_device
             .read_vec(
-                Addr::new(indirect_blk, nth_blk * mem::size_of::<BlkId>() as u32),
+                Addr::new(indirect_blk, nth_blk * BlkId::BYTES_LEN as u32),
                 n_blks,
             )
             .await?;
@@ -486,7 +505,7 @@ where
             if alloced {
                 blk_device
                     .write_slice(
-                        Addr::new(indirect_blk, nth_blk * mem::size_of::<BlkId>() as u32),
+                        Addr::new(indirect_blk, nth_blk * BlkId::BYTES_LEN as u32),
                         &indirect_blks,
                     )
                     .await?;
@@ -712,6 +731,27 @@ impl Iterator for BlksRange<'_> {
     }
 }
 
+impl FromBytes for BlkId {
+    const BYTES_LEN: usize = Self::BYTE_LEN;
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Some(BlkId::from_be_bytes(bytes.try_into().ok()?))
+    }
+}
+
+impl ToBytes for BlkId {
+    fn to_bytes(&self, out: &mut [u8]) {
+        out.copy_from_slice(&self.to_be_bytes());
+    }
+
+    fn bytes_len(&self) -> usize {
+        Self::BYTE_LEN
+    }
+}
+
 #[cfg(test)]
 mod test {
     use alloc::{sync::Arc, vec::Vec};
@@ -820,7 +860,7 @@ mod test {
     fn test_find_in_indirect_blks() {
         let cases = [
             (
-                vec![1, 2, 3],
+                vec![1 as BlkId, 2, 3],
                 BlkSize::<u32>::new(32),
                 20,
                 65,
@@ -897,7 +937,7 @@ mod test {
                 inode
                     .naive_fs
                     .blk_device
-                    .write_slice::<BlkId>(Addr::new(indirect_blk_id, 0), &indirect_blks),
+                    .write_slice(Addr::new(indirect_blk_id, 0), &indirect_blks),
             )
             .unwrap();
 
@@ -956,7 +996,7 @@ mod test {
                 inode
                     .naive_fs
                     .blk_device
-                    .write_slice::<BlkId>(Addr::new(indirect_blk_id, 0), &indirect_blks),
+                    .write_slice(Addr::new(indirect_blk_id, 0), &indirect_blks),
             )
             .unwrap();
 

@@ -1,7 +1,7 @@
 use bitmap::Bitmap;
 
 use crate::{
-    blk_device::{BlkDevice, Disk},
+    blk_device::{BlkDevice, Disk, FromBytes, ToBytes},
     maybe_dirty::{MaybeDirty, Syncable},
     BlkId, BoxFuture, Result,
 };
@@ -74,11 +74,6 @@ impl Allocator {
         old
     }
 
-    #[allow(dead_code)]
-    pub fn bitmap_as_slice<T>(&self) -> &[T] {
-        self.bitmap.as_slice()
-    }
-
     pub fn free(&self) -> u16 {
         self.free
     }
@@ -98,6 +93,27 @@ impl Syncable for Allocator {
 }
 
 impl Syncable for Bitmap {}
+
+impl FromBytes for Bitmap {
+    const BYTES_LEN: usize = 0;
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Some(Bitmap::from_bytes_be(bytes))
+    }
+}
+
+impl ToBytes for Bitmap {
+    fn bytes_len(&self) -> usize {
+        (self.capacity() / u8::BITS) as usize
+    }
+
+    fn to_bytes(&self, out: &mut [u8]) {
+        self.to_bytes_be(out)
+    }
+}
 
 #[cfg(test)]
 mod if_test {

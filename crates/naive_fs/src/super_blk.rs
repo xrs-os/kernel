@@ -1,5 +1,3 @@
-use core::{mem, u32};
-
 use alloc::{boxed::Box, vec::Vec};
 use bitmap::Bitmap;
 use futures_util::{future::Map, FutureExt};
@@ -7,26 +5,26 @@ use sleeplock::{Mutex, MutexGuard};
 
 use crate::{
     allocator::Allocator,
-    blk_device::{self, BlkDevice, Disk},
+    blk_device::{self, BlkDevice, Disk, FromBytes, ReadBytesFut, ToBytes},
     consts,
     inode::RawInode,
     maybe_dirty::{MaybeDirty, Syncable},
     root_inode_id, scoped, Addr, BlkId, BlkSize, BoxFuture, Error, InodeId, Result,
 };
-
-use future_ext::{WithArg1, WithArg1Ext};
+use byte_struct::*;
+use future_ext::{WithArg1, WithArg1Ext, WithArg3, WithArg3Ext};
 
 /// RawSuperBlock
-#[repr(C, packed)]
+#[derive(ByteStruct)]
+#[byte_struct_le]
 pub struct RawSuperBlk {
     pub inodes_count: u16,
     pub blks_count: u16,
-    /// Block size 通过 blk_size_log2 计算。
     /// Block size = 1 << blk_size_log2;
     pub blk_size_log2: u8,
     /// when an error is detected,
     /// What the file system driver should do
-    pub on_error: OnError,
+    pub on_error: u16,
     /// Volume id
     pub uuid: [u8; 16],
     /// volume name (C style string)
@@ -39,7 +37,29 @@ pub struct RawSuperBlk {
     pub prealloc_dir_blocks: u8,
 }
 
-#[repr(C, packed)]
+impl FromBytes for RawSuperBlk {
+    const BYTES_LEN: usize = Self::BYTE_LEN;
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Some(Self::read_bytes(bytes))
+    }
+}
+
+impl ToBytes for RawSuperBlk {
+    fn to_bytes(&self, out: &mut [u8]) {
+        self.write_bytes(out);
+    }
+
+    fn bytes_len(&self) -> usize {
+        Self::BYTE_LEN
+    }
+}
+
+#[derive(ByteStruct)]
+#[byte_struct_le]
 pub struct RawDescriptor {
     pub blk_bitmap: BlkId,
     pub inode_bitmap: BlkId,
@@ -50,13 +70,36 @@ pub struct RawDescriptor {
     pub free_inodes_count: u16,
 }
 
+impl FromBytes for RawDescriptor {
+    const BYTES_LEN: usize = Self::BYTE_LEN;
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Some(Self::read_bytes(bytes))
+    }
+}
+
+impl ToBytes for RawDescriptor {
+    fn to_bytes(&self, out: &mut [u8]) {
+        self.write_bytes(out);
+    }
+
+    fn bytes_len(&self) -> usize {
+        Self::BYTE_LEN
+    }
+}
+
 #[repr(u16)]
 pub enum OnError {
     /// Pretend nothing has happened
+    #[allow(dead_code)]
     Continue = 1,
     /// Remount as read-only
     MountAsRo = 2,
     /// Causing Kernel Panic
+    #[allow(dead_code)]
     Panic = 3,
 }
 
@@ -66,7 +109,7 @@ impl Default for RawSuperBlk {
             inodes_count: 0,
             blks_count: 0,
             blk_size_log2: 12,
-            on_error: OnError::MountAsRo,
+            on_error: OnError::MountAsRo as u16,
             uuid: [0; 16],
             volume_name: [0; 16],
             prealloc_blocks: 1,
@@ -134,8 +177,7 @@ impl<MutexType: lock_api::RawMutex> SuperBlk<MutexType> {
             raw_super_blk.set_dirty(true);
         }
 
-        let blk_ids_count_pre_blk =
-            raw_super_blk.blk_size().size() / mem::size_of::<BlkId>() as u32;
+        let blk_ids_count_pre_blk = raw_super_blk.blk_size().size() / BlkId::BYTES_LEN as u32;
         let bytes_per_indirect_blk =
             BlkSize::new(raw_super_blk.blk_size().mul(blk_ids_count_pre_blk));
 
@@ -207,7 +249,7 @@ impl<MutexType: lock_api::RawMutex> SuperBlk<MutexType> {
 
         let inode_table_blk_count = raw_super_blk
             .blk_size()
-            .div_round_up_by(raw_super_blk.inodes_count as u32 * mem::size_of::<RawInode>() as u32)
+            .div_round_up_by(raw_super_blk.inodes_count as u32 * RawInode::BYTE_LEN as u32)
             as u16;
         let reserved_blk_ids = consts::INODE_TABLE_BLK_ID + inode_table_blk_count;
         //  Pre allocate the reserved blk ids
@@ -348,7 +390,7 @@ impl<MutexType: lock_api::RawMutex> SuperBlk<MutexType> {
 }
 
 const fn raw_descriptor_offset() -> u32 {
-    consts::SUPER_BLK_OFFSET + mem::size_of::<RawSuperBlk>() as u32
+    consts::SUPER_BLK_OFFSET + RawSuperBlk::BYTES_LEN as u32
 }
 
 impl<MutexType> SuperBlk<MutexType> {
@@ -361,7 +403,7 @@ impl<MutexType> SuperBlk<MutexType> {
 
     pub fn raw_inode_addr(&self, inode_id: InodeId) -> Addr {
         Addr::new(self.inode_table, 0).add_offset(
-            inode_id as u32 * mem::size_of::<RawInode>() as u32,
+            inode_id as u32 * RawInode::BYTE_LEN as u32,
             self.raw_super_blk.blk_size(),
         )
     }
@@ -393,22 +435,28 @@ impl<MutexType: lock_api::RawMutex<GuardMarker = lock_api::GuardSend> + Sync> Sy
     }
 }
 
-async fn load_allocator<DK: Disk>(
+type LoadAllocatorFut<'a, DK> = Map<
+    WithArg3<ReadBytesFut<'a, DK>, Addr, u16, u16>,
+    fn((Result<Vec<u8>>, Addr, u16, u16)) -> Result<Allocator>,
+>;
+
+fn load_allocator<'a, DK: Disk>(
     bitmap_blk_id: BlkId,
     capacity: u16,
     free: u16,
-    blk_device: &BlkDevice<DK>,
-) -> Result<Allocator> {
+    blk_device: &'a BlkDevice<DK>,
+) -> LoadAllocatorFut<'a, DK> {
     let addr = Addr::new(bitmap_blk_id, 0);
-    let bitmap_data: Vec<u64> = blk_device
-        .read_vec(
-            addr,
-            ((capacity + u64::BITS as u16 - 1) / u64::BITS as u16) as u32, // <==> div_round_up(capacity, u64::BITS)
-        )
-        .await?;
-    Ok(Allocator::new(
-        MaybeDirty::new(addr, bitmap_data.into()),
-        free,
-        capacity,
-    ))
+    blk_device
+        .read_bytes(addr, crate::div_round_up!(capacity as u32, u8::BITS))
+        .with_arg3(addr, capacity, free)
+        .map(|(bitmap_bytes_res, addr, capacity, free)| {
+            bitmap_bytes_res.map(|bitmap_bytes| {
+                Allocator::new(
+                    MaybeDirty::new(addr, Bitmap::from_bytes_be(&bitmap_bytes)),
+                    free,
+                    capacity,
+                )
+            })
+        })
 }

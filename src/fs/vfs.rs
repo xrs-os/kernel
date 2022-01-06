@@ -73,11 +73,13 @@ impl<FS: Filesystem> Vfs<FS> {
         parent_dir
             .append(filename.into(), new_inode.id(), FileType::from_mode(mode))
             .await?;
+
         if mode.is_dir() {
             new_inode.append_dot(parent_dir.id()).await?;
         }
         parent_dir.sync().await?;
         new_inode.sync().await?;
+
         Ok(new_inode)
     }
 

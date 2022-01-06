@@ -92,6 +92,25 @@ name = "bitmap"
 version = "0.1.0"
 
 [[package]]
+name = "byte_struct"
+version = "0.7.1"
+source = "git+https://github.com/xrs-os/byte-struct-rs?branch=master#07372dbff739e5c53a1378e820abd6b3a17420fc"
+dependencies = [
+ "array-init",
+ "byte_struct_derive",
+]
+
+[[package]]
+name = "byte_struct_derive"
+version = "0.4.2"
+source = "git+https://github.com/xrs-os/byte-struct-rs?branch=master#07372dbff739e5c53a1378e820abd6b3a17420fc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bytes"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -389,9 +408,11 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "bitmap",
+ "byte_struct",
  "future_ext",
  "futures-util",
  "lock_api",
+ "num_enum",
  "pin-project",
  "sleeplock",
  "spin",

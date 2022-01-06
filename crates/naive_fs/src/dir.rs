@@ -1,12 +1,18 @@
-use crate::{inode::Inode, InodeId};
+use crate::{
+    blk_device::{FromBytes, ToBytes},
+    inode::Inode,
+    InodeId,
+};
 
 use super::{blk_device::Disk, Error, Result};
 use alloc::{boxed::Box, str, string::String, vec::Vec};
-use core::{fmt, mem, pin::Pin};
+use byte_struct::*;
+use core::{fmt, pin::Pin};
 use futures_util::{pin_mut, stream, Stream, StreamExt};
 
 /// RawDirEntry
-#[repr(C, packed)]
+#[derive(ByteStruct)]
+#[byte_struct_le]
 pub struct RawDirEntry {
     /// inode number of the directory entry.
     pub inode_id: InodeId,
@@ -15,17 +21,38 @@ pub struct RawDirEntry {
     /// Directory entries must be 4-byte aligned
     /// and cannot span multiple blocks.
     pub rec_len: u16,
-    /// file type
-    pub file_type: FileType,
+    /// FileType
+    pub file_type: u8,
     /// File name length
     pub name_len: u8,
     /// name
     name: [u8; 255],
 }
 
+impl FromBytes for RawDirEntry {
+    const BYTES_LEN: usize = Self::BYTE_LEN;
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Some(Self::read_bytes(bytes))
+    }
+}
+
+impl ToBytes for RawDirEntry {
+    fn bytes_len(&self) -> usize {
+        Self::BYTE_LEN
+    }
+
+    fn to_bytes(&self, out: &mut [u8]) {
+        self.write_bytes(out);
+    }
+}
+
 impl RawDirEntry {
     pub fn new(inode_id: InodeId, name: DirEntryName, file_type: FileType) -> Self {
-        Self::with_rec_len(inode_id, name, file_type, mem::size_of::<Self>() as u16)
+        Self::with_rec_len(inode_id, name, file_type, Self::BYTE_LEN as u16)
     }
 
     pub fn with_rec_len(
@@ -39,7 +66,7 @@ impl RawDirEntry {
             inode_id,
             rec_len,
             name_len,
-            file_type,
+            file_type: file_type as u8,
             name: name_bytes,
         }
     }
@@ -105,24 +132,25 @@ where
             .next()
             .await
             .expect("Expect `.` dir entry.")?;
-        let (_, mut insert_offset) = dir_entry_stream_pinned
+        let (_, dotdot_offset) = dir_entry_stream_pinned
             .next()
             .await
             .expect("Expect `..` dir entry.")?;
+        let raw_dir_entry_size = RawDirEntry::BYTE_LEN as u16;
+        let mut insert_offset = dotdot_offset + raw_dir_entry_size as u32;
 
-        let raw_dir_entry_size = mem::size_of::<RawDirEntry>() as u16;
         let new_rec_len = loop {
             match dir_entry_stream_pinned.next().await {
                 Some(Ok((mut dir_entry, offset))) => {
-                    insert_offset = offset + dir_entry.rec_len as u32;
-
                     if dir_entry.rec_len >= raw_dir_entry_size * 2 {
                         // There is enough space in the current dir_entry to store a new dir_entry
                         let origin_rev_len = dir_entry.rec_len;
                         dir_entry.rec_len = raw_dir_entry_size;
                         self.write(offset, &dir_entry).await?;
+                        insert_offset = offset + dir_entry.rec_len as u32;
                         break origin_rev_len - raw_dir_entry_size;
                     }
+                    insert_offset = offset + dir_entry.rec_len as u32;
                 }
                 Some(Err(e)) => return Err(e),
                 None => break raw_dir_entry_size,
@@ -186,7 +214,7 @@ where
                 Some(raw_dir_entry) if raw_dir_entry.inode_id != 0 => {
                     let rec_len = raw_dir_entry.rec_len;
                     let next_offset = offset + rec_len as u32;
-                    Ok::<_, Error>(Some(((raw_dir_entry, next_offset), next_offset)))
+                    Ok::<_, Error>(Some(((raw_dir_entry, offset), next_offset)))
                 }
                 _ => Ok(None),
             }
@@ -254,22 +282,22 @@ impl fmt::Debug for DirEntryName {
     }
 }
 
-/// DirEntry file type
-#[repr(u8)]
-#[derive(Clone, Copy, Debug)]
-pub enum FileType {
-    /// Regular File
-    RegFile = 1,
-    /// Directory File
-    Dir = 2,
-    /// Character Device
-    ChrDev = 3,
-    /// Block Device
-    BlkDev = 4,
-    /// Buffer File
-    Fifo = 5,
-    /// Socket File
-    Sock = 6,
-    /// Symbolic Link
-    Symlink = 7,
-}
+num_enum::num_enum!(
+    // DirEntry file type
+    pub FileType: u8{
+        // Regular File
+        RegFile = 1,
+        // Directory File
+        Dir = 2,
+        // Character Device
+        ChrDev = 3,
+        // Block Device
+        BlkDev = 4,
+        // Buffer File
+        Fifo = 5,
+        // Socket File
+        Sock = 6,
+        // Symbolic Link
+        Symlink = 7,
+    }
+);
