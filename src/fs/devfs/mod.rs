@@ -29,7 +29,7 @@ impl DevFs {
         let mut dir_entries: BTreeMap<DirEntryName, vfs::RawDirEntry> = BTreeMap::new();
 
         for (idx, (dir_entry_name, file_type, inode)) in dev_inodes.into_iter().enumerate() {
-            let inode_id = idx + DEV_ROOT_INODE_ID;
+            let inode_id = idx + DEV_ROOT_INODE_ID + 1;
             inodes.insert(inode_id, inode);
             dir_entries.insert(
                 dir_entry_name.clone(),
@@ -121,9 +121,8 @@ pub trait DevInode: Send + Sync {
 
     fn lookup<'a>(
         &'a self,
-        name: &'a FsStr,
+        _name: &'a FsStr,
     ) -> BoxFuture<'a, vfs::Result<Option<vfs::DirEntry<Arc<DevFs>>>>> {
-        crate::println!("name:{:?}", name);
         Box::pin(ready(Err(vfs::Error::Unsupport)))
     }
 
@@ -292,7 +291,6 @@ impl DevInode for DevRootInode {
         &'a self,
         name: &'a FsStr,
     ) -> BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>> {
-        crate::println!("-- {:?}", name);
         Box::pin(ready(Ok(self.dir_entries.get(name).map(Clone::clone))))
     }
 

@@ -55,7 +55,15 @@ impl Context {
     }
 
     pub fn run_user(&mut self) -> *mut Trap {
-        unsafe { _run_user(self) }
+        let trap = unsafe { _run_user(self) };
+        unsafe {
+            if let Trap::Syscall = *trap {
+                // Skip ecall instruction
+                self.epc += 4;
+            }
+        }
+
+        trap
     }
 }
 
