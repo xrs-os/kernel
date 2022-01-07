@@ -1,7 +1,6 @@
 use core::{
-    cell::UnsafeCell,
-    future::{ready, Future, Ready},
-    mem::{self, MaybeUninit},
+    future::{ready, Ready},
+    mem::MaybeUninit,
 };
 
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
@@ -47,6 +46,7 @@ impl DevFs {
             root_inode: Arc::new(DevRootInode::new(dir_entries)),
         });
 
+        #[allow(clippy::cast_ref_to_mut)]
         unsafe { &mut *(fs.root_inode.as_ref() as *const DevRootInode as *mut DevRootInode) }
             .init_dev_fs(fs.clone());
         fs
@@ -114,7 +114,7 @@ pub trait DevInode: Send + Sync {
 
     fn lookup_raw<'a>(
         &'a self,
-        name: &'a FsStr,
+        _name: &'a FsStr,
     ) -> BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>> {
         Box::pin(ready(Err(vfs::Error::Unsupport)))
     }
@@ -272,11 +272,15 @@ impl DevInode for DevRootInode {
         })))
     }
 
-    fn read_at<'a>(&'a self, offset: u64, buf: &'a mut [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
+    fn read_at<'a>(
+        &'a self,
+        _offset: u64,
+        _buf: &'a mut [u8],
+    ) -> BoxFuture<'a, vfs::Result<usize>> {
         Box::pin(ready(Err(vfs::Error::Unsupport)))
     }
 
-    fn write_at<'a>(&'a self, offset: u64, src: &'a [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
+    fn write_at<'a>(&'a self, _offset: u64, _src: &'a [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
         Box::pin(ready(Err(vfs::Error::Unsupport)))
     }
 
@@ -323,7 +327,7 @@ impl DevInode for DevRootInode {
             .collect())))
     }
 
-    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<'_, vfs::Result<()>> {
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> BoxFuture<'_, vfs::Result<()>> {
         Box::pin(ready(Err(vfs::Error::Unsupport)))
     }
 }

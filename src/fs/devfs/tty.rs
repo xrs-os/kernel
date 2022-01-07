@@ -1,10 +1,10 @@
 use core::{
-    future::{ready, Future, Ready},
+    future::{ready, Future},
     pin::Pin,
     task::{Context, Poll, Waker},
 };
 
-use alloc::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, collections::VecDeque};
 
 use crate::{
     fs::{ioctl, vfs},
@@ -13,10 +13,7 @@ use crate::{
 };
 use futures_util::future::BoxFuture;
 
-use super::{
-    termios::{Termios, Winsize},
-    DevFs,
-};
+use super::termios::{Termios, Winsize};
 
 const TTY_INODE_ID: vfs::InodeId = 2;
 
@@ -69,7 +66,7 @@ impl super::DevInode for TtyInode {
         })))
     }
 
-    fn read_at<'a>(&'a self, offset: u64, buf: &'a mut [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
+    fn read_at<'a>(&'a self, _offset: u64, buf: &'a mut [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
         Box::pin(ReadAtFut {
             tty_inode: self,
             buf,

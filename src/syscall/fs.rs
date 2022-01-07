@@ -193,7 +193,7 @@ pub async fn sys_fstat(thread: &Arc<Thread>, fd: isize, stat: &mut Stat) -> Resu
     sys_fstatat(
         thread,
         fd,
-        &fs::Path::from_bytes(&[]),
+        fs::Path::from_bytes(&[]),
         stat,
         FStatAtFlags::empty(),
     )

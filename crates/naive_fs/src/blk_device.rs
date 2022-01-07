@@ -84,7 +84,7 @@ impl<DK: Disk> BlkDevice<DK> {
 
     /// Read bytes data from block device,
     /// actual read length may be less than `len`
-    pub fn read_bytes<'a>(&'a self, addr: Addr, len: u32) -> ReadBytesFut<'a, DK> {
+    pub fn read_bytes(&self, addr: Addr, len: u32) -> ReadBytesFut<'_, DK> {
         let mut ret = vec![0; len as usize];
 
         self.read_at(addr, unsafe {
@@ -101,11 +101,12 @@ impl<DK: Disk> BlkDevice<DK> {
 
     /// Read `len` of `T` type data from block device,
     /// actual read length may be less than `len`
-    pub fn read_vec<'a, T: FromBytes>(
-        &'a self,
+    #[allow(clippy::type_complexity)]
+    pub fn read_vec<T: FromBytes>(
+        &self,
         addr: Addr,
         len: u32,
-    ) -> MapOk<ReadBytesFut<'a, DK>, fn(Vec<u8>) -> Vec<T>> {
+    ) -> MapOk<ReadBytesFut<'_, DK>, fn(Vec<u8>) -> Vec<T>> {
         let ratio = T::BYTES_LEN / mem::size_of::<u8>();
         self.read_bytes(addr, len * ratio as u32).map_ok(|bytes| {
             let ratio = T::BYTES_LEN / mem::size_of::<u8>();

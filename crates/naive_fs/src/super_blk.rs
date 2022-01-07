@@ -440,12 +440,12 @@ type LoadAllocatorFut<'a, DK> = Map<
     fn((Result<Vec<u8>>, Addr, u16, u16)) -> Result<Allocator>,
 >;
 
-fn load_allocator<'a, DK: Disk>(
+fn load_allocator<DK: Disk>(
     bitmap_blk_id: BlkId,
     capacity: u16,
     free: u16,
-    blk_device: &'a BlkDevice<DK>,
-) -> LoadAllocatorFut<'a, DK> {
+    blk_device: &BlkDevice<DK>,
+) -> LoadAllocatorFut<'_, DK> {
     let addr = Addr::new(bitmap_blk_id, 0);
     blk_device
         .read_bytes(addr, crate::div_round_up!(capacity as u32, u8::BITS))

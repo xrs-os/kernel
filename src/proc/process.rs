@@ -519,14 +519,10 @@ impl Auxval {
         {
             // if phdr exists in program header, use it
             Some(phdr.virtual_addr())
-        } else if let Some(elf_addr) = elf
-            .program_iter()
-            .find(|ph| ph.get_type() == Ok(program::Type::Load) && ph.offset() == 0)
-        {
-            // otherwise, check if elf is loaded from the beginning, then phdr can be inferred.
-            Some(elf_addr.virtual_addr() + elf.header.pt2.ph_offset())
         } else {
-            None
+            elf.program_iter()
+                .find(|ph| ph.get_type() == Ok(program::Type::Load) && ph.offset() == 0)
+                .map(|elf_addr| elf_addr.virtual_addr() + elf.header.pt2.ph_offset())
         };
         Self {
             at_entry: elf.header.pt2.entry_point(),
@@ -537,12 +533,12 @@ impl Auxval {
     }
 
     fn as_abi_array(&self) -> [[u64; 2]; 5] {
-        return [
+        [
             [Self::AT_PHDR, self.at_phdr],
             [Self::AT_PHENT, self.at_phent as u64],
             [Self::AT_PHNUM, self.at_phnum as u64],
             [Self::AT_PAGESZ, PageParamA::PAGE_SIZE as u64],
             [Self::AT_ENTRY, self.at_entry],
-        ];
+        ]
     }
 }
