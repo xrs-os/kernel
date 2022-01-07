@@ -245,8 +245,8 @@ pub struct WriteAtFut<'a> {
 
 #[pin_project(project = WriteAtStateProj)]
 enum WriteAtState<'a> {
-    HeadPartialBlk(#[pin] Option<WriteHeadPartialBlkFut<'a>>),
-    TailPartialBlk(#[pin] Option<WriteTailPartialBlkFut<'a>>),
+    HeadPartialBlk(#[pin] Option<WritePartialBlkFut<'a>>),
+    TailPartialBlk(#[pin] Option<WritePartialBlkFut<'a>>),
     FullBlks {
         blk_id: usize,
         #[pin]
@@ -277,18 +277,31 @@ impl Future for WriteAtFut<'_> {
                                     fut: None,
                                 }
                             } else {
-                                let src = if write_space.start_blk_id == write_space.end_blk_id {
-                                    &this.src[..write_space.pos_of_tail_partial_blk.unwrap()
-                                        - write_space.pos_of_head_partial_blk.unwrap()]
-                                } else {
-                                    &this.src
-                                        [..blk_size - write_space.pos_of_head_partial_blk.unwrap()]
-                                };
+                                let (src, target_range) =
+                                    if write_space.start_blk_id == write_space.end_blk_id {
+                                        let pos_of_head_partial_blk =
+                                            write_space.pos_of_head_partial_blk.unwrap();
+                                        let pos_of_tail_partial_blk =
+                                            write_space.pos_of_tail_partial_blk.unwrap();
 
-                                WriteAtState::HeadPartialBlk(Some(write_head_partial_blk(
+                                        (
+                                            &this.src[..pos_of_tail_partial_blk
+                                                - pos_of_head_partial_blk],
+                                            pos_of_head_partial_blk..pos_of_tail_partial_blk,
+                                        )
+                                    } else {
+                                        (
+                                            &this.src[..blk_size
+                                                - write_space.pos_of_head_partial_blk.unwrap()],
+                                            write_space.pos_of_head_partial_blk.unwrap()..blk_size,
+                                        )
+                                    };
+
+                                WriteAtState::HeadPartialBlk(Some(write_partial_blk(
                                     *this.phy_blk_device,
                                     write_space.start_blk_id,
                                     src,
+                                    target_range,
                                 )))
                             }
                         }
@@ -311,10 +324,11 @@ impl Future for WriteAtFut<'_> {
                             if !write_space.has_partial_tail_blk() {
                                 return Poll::Ready(Ok(*this.written_size));
                             }
-                            WriteAtState::TailPartialBlk(Some(write_tail_partial_blk(
+                            WriteAtState::TailPartialBlk(Some(write_partial_blk(
                                 *this.phy_blk_device,
                                 write_space.end_blk_id,
                                 &this.src[*this.written_size..],
+                                0..write_space.pos_of_tail_partial_blk.unwrap(),
                             )))
                         }
                         Some(write_partial_blk_fut) => {
@@ -359,42 +373,28 @@ impl Future for WriteAtFut<'_> {
 /// To write PartialBlock data, need to read the entire block data,
 /// Then modify the data, finally write it back
 #[pin_project]
-struct WritePartialBlkFut<'a, const HEAD_OR_TAIL: bool> {
+struct WritePartialBlkFut<'a> {
     phy_blk_device: &'a Arc<dyn BlkDevice>,
     blk_id: usize,
     blk_data: BlkData,
     src: &'a [u8],
+    target_range: core::ops::Range<usize>,
     #[pin]
     state: WritePartialBlkState<'a>,
 }
 
-type WriteHeadPartialBlkFut<'a> = WritePartialBlkFut<'a, true>;
-type WriteTailPartialBlkFut<'a> = WritePartialBlkFut<'a, false>;
-
-fn write_head_partial_blk<'a>(
+fn write_partial_blk<'a>(
     phy_blk_device: &'a Arc<dyn BlkDevice>,
     blk_id: usize,
     src: &'a [u8],
-) -> WriteHeadPartialBlkFut<'a> {
-    WriteHeadPartialBlkFut {
+    target_range: core::ops::Range<usize>,
+) -> WritePartialBlkFut<'a> {
+    WritePartialBlkFut {
         state: WritePartialBlkState::Init,
         phy_blk_device,
         blk_id,
         blk_data: BlkData(vec![0u8; phy_blk_device.blk_size().size() as usize]),
-        src,
-    }
-}
-
-fn write_tail_partial_blk<'a>(
-    phy_blk_device: &'a Arc<dyn BlkDevice>,
-    blk_id: usize,
-    src: &'a [u8],
-) -> WriteTailPartialBlkFut<'a> {
-    WriteTailPartialBlkFut {
-        state: WritePartialBlkState::Init,
-        phy_blk_device,
-        blk_id,
-        blk_data: BlkData(vec![0u8; phy_blk_device.blk_size().size() as usize]),
+        target_range,
         src,
     }
 }
@@ -406,7 +406,7 @@ enum WritePartialBlkState<'a> {
     WriteBlk(#[pin] BoxFuture<'a, blk::Result<()>>),
 }
 
-impl<'a, const HEAD_OR_TAIL: bool> Future for WritePartialBlkFut<'a, HEAD_OR_TAIL> {
+impl<'a> Future for WritePartialBlkFut<'a> {
     type Output = blk::Result<usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -420,14 +420,7 @@ impl<'a, const HEAD_OR_TAIL: bool> Future for WritePartialBlkFut<'a, HEAD_OR_TAI
                 ),
                 WritePartialBlkStateProj::ReadBlk(read_fut) => {
                     ready!(read_fut.poll(cx)?);
-                    if HEAD_OR_TAIL {
-                        let blk_data_len = this.blk_data.len();
-                        (&mut this.blk_data[blk_data_len - this.src.len()..])
-                            .copy_from_slice(this.src);
-                    } else {
-                        (&mut this.blk_data[..this.src.len()]).copy_from_slice(this.src);
-                    }
-
+                    (&mut this.blk_data[this.target_range.clone()]).copy_from_slice(this.src);
                     WritePartialBlkState::WriteBlk(
                         this.phy_blk_device
                             .write_blk(*this.blk_id, unsafe { this.blk_data.as_mut_slice() }),

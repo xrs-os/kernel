@@ -1,10 +1,10 @@
 use core::{
-    future::{ready, Future},
+    future::{ready, Future, Ready},
     pin::Pin,
     task::{Context, Poll, Waker},
 };
 
-use alloc::{boxed::Box, collections::VecDeque};
+use alloc::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
 
 use crate::{
     fs::{ioctl, vfs},
@@ -13,7 +13,10 @@ use crate::{
 };
 use futures_util::future::BoxFuture;
 
-use super::termios::{Termios, Winsize};
+use super::{
+    termios::{Termios, Winsize},
+    DevFs,
+};
 
 const TTY_INODE_ID: vfs::InodeId = 2;
 
@@ -54,7 +57,7 @@ impl super::DevInode for TtyInode {
         TTY_INODE_ID
     }
 
-    fn metadata(&self) -> BoxFuture<vfs::Result<vfs::Metadata>> {
+    fn metadata(&self) -> BoxFuture<'_, vfs::Result<vfs::Metadata>> {
         Box::pin(ready(Ok(vfs::Metadata {
             mode: vfs::Mode::TY_CHR
                 | vfs::Mode::PERM_RX_GRP
@@ -66,7 +69,7 @@ impl super::DevInode for TtyInode {
         })))
     }
 
-    fn read_at<'a>(&'a self, _offset: u64, buf: &'a mut [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
+    fn read_at<'a>(&'a self, offset: u64, buf: &'a mut [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
         Box::pin(ReadAtFut {
             tty_inode: self,
             buf,
@@ -74,29 +77,16 @@ impl super::DevInode for TtyInode {
     }
 
     fn write_at<'a>(&'a self, _offset: u64, src: &'a [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
-        Box::pin(async move {
-            let s = unsafe { core::str::from_utf8_unchecked(src) };
-            crate::print!("{}", s);
-            Ok(src.len())
-        })
+        let s = unsafe { core::str::from_utf8_unchecked(src) };
+        crate::print!("{}", s);
+        Box::pin(ready(Ok(src.len())))
     }
 
-    fn sync(&self) -> BoxFuture<vfs::Result<()>> {
+    fn sync(&self) -> BoxFuture<'_, vfs::Result<()>> {
         Box::pin(ready(Ok(())))
     }
 
-    fn lookup_raw<'a>(
-        &'a self,
-        _name: &'a crate::fs::FsStr,
-    ) -> BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>> {
-        Box::pin(ready(Err(vfs::Error::NotDir)))
-    }
-
-    fn ls_raw(&self) -> BoxFuture<vfs::Result<alloc::vec::Vec<vfs::RawDirEntry>>> {
-        Box::pin(ready(Err(vfs::Error::NotDir)))
-    }
-
-    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<vfs::Result<()>> {
+    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<'_, vfs::Result<()>> {
         Box::pin(ready(match cmd {
             ioctl::CMD_TCGETS => {
                 let termios = arg as *mut Termios;

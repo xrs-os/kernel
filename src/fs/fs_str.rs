@@ -1,6 +1,5 @@
 use alloc::str;
 use core::{borrow::Borrow, fmt, hash::Hash, ops::Deref};
-
 pub const DIR_ENTRY_NAME_CAP: usize = 255;
 
 #[repr(transparent)]

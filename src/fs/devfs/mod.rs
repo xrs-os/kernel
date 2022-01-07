@@ -1,11 +1,15 @@
-use core::future::{ready, Ready};
+use core::{
+    cell::UnsafeCell,
+    future::{ready, Future, Ready},
+    mem::{self, MaybeUninit},
+};
 
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 use futures_util::future::BoxFuture;
 
 use crate::time::Timespec;
 
-use super::{mount_fs::NotDynInode, vfs, DirEntryName};
+use super::{mount_fs::NotDynInode, vfs, DirEntryName, FsStr};
 
 pub mod termios;
 pub mod tty;
@@ -14,6 +18,7 @@ const DEV_ROOT_INODE_ID: vfs::InodeId = 1;
 
 /// Device filesystem
 pub struct DevFs {
+    root_inode: Arc<DevRootInode>,
     inodes: BTreeMap<vfs::InodeId, Arc<dyn DevInode>>,
 }
 
@@ -37,8 +42,14 @@ impl DevFs {
             );
         }
 
-        inodes.insert(DEV_ROOT_INODE_ID, Arc::new(DevRootInode { dir_entries }));
-        Arc::new(Self { inodes })
+        let fs = Arc::new(Self {
+            inodes,
+            root_inode: Arc::new(DevRootInode::new(dir_entries)),
+        });
+
+        unsafe { &mut *(fs.root_inode.as_ref() as *const DevRootInode as *mut DevRootInode) }
+            .init_dev_fs(fs.clone());
+        fs
     }
 }
 
@@ -75,7 +86,11 @@ impl vfs::Filesystem for Arc<DevFs> {
     }
 
     fn load_inode(&self, inode_id: vfs::InodeId) -> Self::LoadInodeFut<'_> {
-        ready(Ok(self.inodes.get(&inode_id).map(Clone::clone)))
+        ready(Ok(if inode_id == DEV_ROOT_INODE_ID {
+            Some(self.root_inode.clone())
+        } else {
+            self.inodes.get(&inode_id).map(Clone::clone)
+        }))
     }
 
     /// Get the BlkDevice's block_size.
@@ -92,16 +107,35 @@ impl vfs::Filesystem for Arc<DevFs> {
 /// Device Inode trait
 pub trait DevInode: Send + Sync {
     fn id(&self) -> vfs::InodeId;
-    fn metadata(&self) -> BoxFuture<vfs::Result<vfs::Metadata>>;
+    fn metadata(&self) -> BoxFuture<'_, vfs::Result<vfs::Metadata>>;
     fn read_at<'a>(&'a self, offset: u64, buf: &'a mut [u8]) -> BoxFuture<'a, vfs::Result<usize>>;
     fn write_at<'a>(&'a self, offset: u64, src: &'a [u8]) -> BoxFuture<'a, vfs::Result<usize>>;
-    fn sync(&self) -> BoxFuture<vfs::Result<()>>;
+    fn sync(&self) -> BoxFuture<'_, vfs::Result<()>>;
+
     fn lookup_raw<'a>(
         &'a self,
-        name: &'a super::FsStr,
-    ) -> BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>>;
-    fn ls_raw(&self) -> BoxFuture<vfs::Result<Vec<vfs::RawDirEntry>>>;
-    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<vfs::Result<()>>;
+        name: &'a FsStr,
+    ) -> BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>> {
+        Box::pin(ready(Err(vfs::Error::Unsupport)))
+    }
+
+    fn lookup<'a>(
+        &'a self,
+        name: &'a FsStr,
+    ) -> BoxFuture<'a, vfs::Result<Option<vfs::DirEntry<Arc<DevFs>>>>> {
+        crate::println!("name:{:?}", name);
+        Box::pin(ready(Err(vfs::Error::Unsupport)))
+    }
+
+    fn ls_raw(&self) -> BoxFuture<'_, vfs::Result<Vec<vfs::RawDirEntry>>> {
+        Box::pin(ready(Err(vfs::Error::Unsupport)))
+    }
+
+    /// List all dir entries in the current directory
+    fn ls(&self) -> BoxFuture<'_, vfs::Result<Vec<vfs::DirEntry<Arc<DevFs>>>>> {
+        Box::pin(ready(Err(vfs::Error::Unsupport)))
+    }
+    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<'_, vfs::Result<()>>;
 }
 
 impl NotDynInode for Arc<dyn DevInode> {}
@@ -118,12 +152,12 @@ impl vfs::Inode for Arc<dyn DevInode> {
     type WriteAtFut<'a> = BoxFuture<'a, vfs::Result<usize>>;
     type SyncFut<'a> = BoxFuture<'a, vfs::Result<()>>;
     type AppendDotFut<'a> = Ready<vfs::Result<()>>;
-    type LookupRawFut<'a> = Ready<vfs::Result<Option<vfs::RawDirEntry>>>;
-    type LookupFut<'a> = Ready<vfs::Result<Option<vfs::DirEntry<Self::FS>>>>;
+    type LookupRawFut<'a> = BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>>;
+    type LookupFut<'a> = BoxFuture<'a, vfs::Result<Option<vfs::DirEntry<Self::FS>>>>;
     type AppendFut<'a> = Ready<vfs::Result<()>>;
     type RemoveFut<'a> = Ready<vfs::Result<Option<vfs::RawDirEntry>>>;
-    type LsRawFut<'a> = Ready<vfs::Result<Vec<vfs::RawDirEntry>>>;
-    type LsFut<'a> = Ready<vfs::Result<Vec<vfs::DirEntry<Self::FS>>>>;
+    type LsRawFut<'a> = BoxFuture<'a, vfs::Result<Vec<vfs::RawDirEntry>>>;
+    type LsFut<'a> = BoxFuture<'a, vfs::Result<Vec<vfs::DirEntry<Self::FS>>>>;
     type IOCtlFut<'a> = BoxFuture<'a, vfs::Result<()>>;
 
     fn id(&self) -> vfs::InodeId {
@@ -131,7 +165,7 @@ impl vfs::Inode for Arc<dyn DevInode> {
     }
 
     fn metadata(&self) -> Self::MetadataFut<'_> {
-        DevInode::metadata(&**self)
+        Box::pin(DevInode::metadata(&**self))
     }
 
     fn chown(&self, _uid: u32, _gid: u32) -> Self::ChownFut<'_> {
@@ -166,12 +200,12 @@ impl vfs::Inode for Arc<dyn DevInode> {
         ready(Err(vfs::Error::Unsupport))
     }
 
-    fn lookup_raw<'a>(&'a self, _name: &'a super::FsStr) -> Self::LookupRawFut<'a> {
-        ready(Err(vfs::Error::Unsupport))
+    fn lookup_raw<'a>(&'a self, name: &'a super::FsStr) -> Self::LookupRawFut<'a> {
+        DevInode::lookup_raw(&**self, name)
     }
 
-    fn lookup<'a>(&'a self, _name: &'a super::FsStr) -> Self::LookupFut<'a> {
-        ready(Err(vfs::Error::Unsupport))
+    fn lookup<'a>(&'a self, name: &'a super::FsStr) -> Self::LookupFut<'a> {
+        DevInode::lookup(&**self, name)
     }
 
     fn append(
@@ -188,11 +222,11 @@ impl vfs::Inode for Arc<dyn DevInode> {
     }
 
     fn ls_raw(&self) -> Self::LsRawFut<'_> {
-        ready(Err(vfs::Error::Unsupport))
+        DevInode::ls_raw(&**self)
     }
 
     fn ls(&self) -> Self::LsFut<'_> {
-        ready(Err(vfs::Error::Unsupport))
+        DevInode::ls(&**self)
     }
 
     fn ioctl(&self, cmd: u32, arg: usize) -> Self::IOCtlFut<'_> {
@@ -201,15 +235,33 @@ impl vfs::Inode for Arc<dyn DevInode> {
 }
 
 pub struct DevRootInode {
+    dev_fs: MaybeUninit<Arc<DevFs>>,
     dir_entries: BTreeMap<DirEntryName, vfs::RawDirEntry>,
+}
+
+impl DevRootInode {
+    fn new(dir_entries: BTreeMap<DirEntryName, vfs::RawDirEntry>) -> Self {
+        Self {
+            dev_fs: MaybeUninit::uninit(),
+            dir_entries,
+        }
+    }
+
+    fn init_dev_fs(&mut self, dev_fs: Arc<DevFs>) {
+        self.dev_fs = MaybeUninit::new(dev_fs);
+    }
+
+    fn assume_dev_fs(&self) -> &Arc<DevFs> {
+        unsafe { self.dev_fs.assume_init_ref() }
+    }
 }
 
 impl DevInode for DevRootInode {
     fn id(&self) -> vfs::InodeId {
-        DEV_ROOT_INODE_ID
+        todo!()
     }
 
-    fn metadata(&self) -> BoxFuture<vfs::Result<vfs::Metadata>> {
+    fn metadata(&self) -> BoxFuture<'_, vfs::Result<vfs::Metadata>> {
         Box::pin(ready(Ok(vfs::Metadata {
             mode: vfs::Mode::TY_DIR
                 | vfs::Mode::PERM_RWX_USR
@@ -220,30 +272,39 @@ impl DevInode for DevRootInode {
         })))
     }
 
-    fn read_at<'a>(
-        &'a self,
-        _offset: u64,
-        _buf: &'a mut [u8],
-    ) -> BoxFuture<'a, vfs::Result<usize>> {
+    fn read_at<'a>(&'a self, offset: u64, buf: &'a mut [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
         Box::pin(ready(Err(vfs::Error::Unsupport)))
     }
 
-    fn write_at<'a>(&'a self, _offset: u64, _src: &'a [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
+    fn write_at<'a>(&'a self, offset: u64, src: &'a [u8]) -> BoxFuture<'a, vfs::Result<usize>> {
         Box::pin(ready(Err(vfs::Error::Unsupport)))
     }
 
-    fn sync(&self) -> BoxFuture<vfs::Result<()>> {
+    fn sync(&self) -> BoxFuture<'_, vfs::Result<()>> {
         Box::pin(ready(Ok(())))
     }
 
     fn lookup_raw<'a>(
         &'a self,
-        name: &'a super::FsStr,
+        name: &'a FsStr,
     ) -> BoxFuture<'a, vfs::Result<Option<vfs::RawDirEntry>>> {
+        crate::println!("-- {:?}", name);
         Box::pin(ready(Ok(self.dir_entries.get(name).map(Clone::clone))))
     }
 
-    fn ls_raw(&self) -> BoxFuture<vfs::Result<Vec<vfs::RawDirEntry>>> {
+    fn lookup<'a>(
+        &'a self,
+        name: &'a FsStr,
+    ) -> BoxFuture<'a, vfs::Result<Option<vfs::DirEntry<Arc<DevFs>>>>> {
+        Box::pin(ready(Ok(self.dir_entries.get(name).map(|raw_dir_entry| {
+            vfs::DirEntry {
+                raw: raw_dir_entry.clone(),
+                fs: self.assume_dev_fs().clone(),
+            }
+        }))))
+    }
+
+    fn ls_raw(&self) -> BoxFuture<'_, vfs::Result<Vec<vfs::RawDirEntry>>> {
         Box::pin(ready(Ok(self
             .dir_entries
             .iter()
@@ -251,7 +312,18 @@ impl DevInode for DevRootInode {
             .collect())))
     }
 
-    fn ioctl(&self, _cmd: u32, _arg: usize) -> BoxFuture<vfs::Result<()>> {
+    fn ls(&self) -> BoxFuture<'_, vfs::Result<Vec<vfs::DirEntry<Arc<DevFs>>>>> {
+        Box::pin(ready(Ok(self
+            .dir_entries
+            .iter()
+            .map(|(_, raw_dir_entry)| vfs::DirEntry {
+                raw: raw_dir_entry.clone(),
+                fs: self.assume_dev_fs().clone(),
+            })
+            .collect())))
+    }
+
+    fn ioctl(&self, cmd: u32, arg: usize) -> BoxFuture<'_, vfs::Result<()>> {
         Box::pin(ready(Err(vfs::Error::Unsupport)))
     }
 }

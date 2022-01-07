@@ -9,7 +9,7 @@ mod ioctl;
 pub mod naive_fs_vfs;
 mod path;
 mod ram_blk;
-mod ram_vfs;
+mod ram_fs;
 pub mod rootfs;
 pub mod util;
 pub mod vfs;

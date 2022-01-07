@@ -20,7 +20,7 @@ use future_ext::{WithArg2, WithArg2Ext};
 use sleeplock::RwLock;
 
 /// RawInode
-#[derive(ByteStruct)]
+#[derive(ByteStruct, Debug)]
 #[byte_struct_le]
 pub struct RawInode {
     pub mode: Mode,

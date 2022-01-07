@@ -217,9 +217,14 @@ impl<T: vfs::Inode + NotDynInode + 'static> DynInode for T {
 
     fn lookup<'a>(
         &'a self,
-        _name: &'a fs::FsStr,
+        name: &'a fs::FsStr,
     ) -> BoxFuture<'a, vfs::Result<Option<vfs::DirEntry<Arc<dyn DynFilesystem>>>>> {
-        unreachable!()
+        Box::pin(vfs::Inode::lookup(self, name).map_ok(move |dir_entry_opt| {
+            dir_entry_opt.map(|dir_entry| vfs::DirEntry {
+                raw: dir_entry.raw,
+                fs: Arc::new(dir_entry.fs) as Arc<dyn DynFilesystem>,
+            })
+        }))
     }
 
     fn append(
@@ -524,10 +529,7 @@ impl<InnerFs: vfs::Filesystem + 'static> DynInode for MInode<InnerFs> {
                             raw: raw_dir_entry,
                             fs: self.mfs.clone() as Arc<dyn DynFilesystem>,
                         },
-                        Some(fs) => vfs::DirEntry {
-                            raw: raw_dir_entry,
-                            fs,
-                        },
+                        Some(fs) => fs.root_dir_entry(),
                     }
                 })
             }),
