@@ -13,7 +13,23 @@ const AT_FDCWD: isize = -100;
 
 #[allow(clippy::empty_loop)]
 pub fn main() {
-    let tty = sys_openat(AT_FDCWD, b"/dev/tty\0", 2, 0);
-    sys_write(tty, "hello world".as_bytes());
+    let _tty0 = sys_openat(AT_FDCWD, b"/dev/tty\0", 2, 0);
+    let _tty1 = sys_openat(AT_FDCWD, b"/dev/tty\0", 2, 0);
+
+    sys_write(
+        _tty0,
+        r#"
+    ██     ██   ███████    ████████       ███████    ████████
+    ░░██   ██   ██░░░░░██  ██░░░░░░       ░██░░░░██  ██░░░░░░ 
+     ░░██ ██   ██     ░░██░██             ░██   ░██ ░██       
+      ░░███   ░██      ░██░█████████ █████░███████  ░█████████
+       ██░██  ░██      ░██░░░░░░░░██░░░░░ ░██░░░██  ░░░░░░░░██
+      ██ ░░██ ░░██     ██        ░██      ░██  ░░██        ░██
+     ██   ░░██ ░░███████   ████████       ░██   ░░██ ████████ 
+    ░░     ░░   ░░░░░░░   ░░░░░░░░        ░░     ░░ ░░░░░░░░  
+"#
+        .as_bytes(),
+    );
     loop {}
 }
+

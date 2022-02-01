@@ -11,7 +11,7 @@ use crate::time::Timespec;
 use super::{mount_fs::NotDynInode, vfs, DirEntryName, FsStr};
 
 pub mod termios;
-pub mod tty;
+pub mod dev_tty;
 
 const DEV_ROOT_INODE_ID: vfs::InodeId = 1;
 

@@ -248,7 +248,7 @@ impl ThreadFuture {
 impl Future for ThreadFuture {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        crate::println!("thread polled");
+        // crate::println!("thread polled");
 
         let this = self.project();
 

@@ -21,7 +21,7 @@ pub use disk::Disk;
 pub use fs_str::{DirEntryName, FsStr, FsString};
 pub use path::*;
 
-use crate::{driver, fs::devfs::tty::TtyInode, proc};
+use crate::{driver, fs::devfs::dev_tty::TtyInode, proc};
 
 use self::{mount_fs::DynInode, rootfs::root_fs};
 
