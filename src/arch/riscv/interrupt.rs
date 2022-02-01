@@ -159,7 +159,7 @@ extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
     // crate::println!("usepc: 0x{:x}", riscv::register::sepc::read());
     Box::into_raw(Box::new(match scause.cause() {
         scause::Trap::Interrupt(scause::Interrupt::SupervisorTimer) => {
-            crate::handler::on_timer();
+            crate::handler::on_timer(false);
             set_next_timer_interrupt();
             Trap::Timer
         }
@@ -176,12 +176,12 @@ extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
 extern "C" fn kernel_trap_handler(_ctx: &mut Context) {
     let scause = scause::read();
     let _stval = stval::read();
-    // crate::println!("cause: {:?}", scause.cause());
-    // crate::println!("stval: 0x{:x}", _stval);
-    // crate::println!("sepc: 0x{:x}", riscv::register::sepc::read());
+    // crate::println!("kernal cause: {:?}", scause.cause());
+    // crate::println!("kernal stval: 0x{:x}", _stval);
+    // crate::println!("kernal sepc: 0x{:x}", riscv::register::sepc::read());
     match scause.cause() {
         scause::Trap::Interrupt(scause::Interrupt::SupervisorTimer) => {
-            crate::handler::on_timer();
+            crate::handler::on_timer(true);
             set_next_timer_interrupt();
         }
         scause::Trap::Interrupt(scause::Interrupt::SupervisorExternal) => external_handler(),
@@ -222,7 +222,7 @@ fn set_next_timer_interrupt() {
             }
         }
     }
-    sbi::set_timer(get_cycle() + 965000);
+    sbi::set_timer(get_cycle() + 9650000);
 }
 
 /// Enable external interrupt

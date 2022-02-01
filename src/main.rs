@@ -69,7 +69,7 @@ fn kmain(_hartid: usize, dtb_pa: usize) {
 }
 
 mod handler {
-    pub fn on_timer() {
-        // println!("timer tiggered");
+    pub fn on_timer(kernel: bool) {
+        println!("timer tiggered. {}", if kernel { "kernel" } else { "user" });
     }
 }

@@ -70,7 +70,9 @@ impl<Param: PageParam> PageTable<Param> {
     }
 
     unsafe fn entry_iter(&self) -> impl Iterator<Item = PageTableEntry<Param>> + '_ {
-        (0..Param::PTE_COUNT).map(move |idx| unsafe { self.get_entry_unchecked(idx) })
+        (0..Param::PTE_COUNT)
+            .map(move |idx| unsafe { self.get_entry_unchecked(idx) })
+            .filter(PageTableEntry::is_valid)
     }
 
     // Get the virtual address of the specified page table entry

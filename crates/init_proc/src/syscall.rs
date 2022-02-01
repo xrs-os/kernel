@@ -4,6 +4,7 @@ enum SyscallNum {
     Read = 63,
     Write = 64,
     Exit = 93,
+    Clone = 220,
 }
 
 macro_rules! syscall {
@@ -95,5 +96,12 @@ pub fn sys_write(fd: isize, buf: &[u8]) -> usize {
             buf.as_ptr() as usize,
             buf.len(),
         )
+    }
+}
+
+#[allow(dead_code)]
+pub fn sys_clone() -> usize {
+    unsafe {
+        syscall0(SyscallNum::Clone)
     }
 }

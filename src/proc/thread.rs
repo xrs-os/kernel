@@ -40,7 +40,7 @@ bitflags! {
         const WAKEKILL = 0b1000;
         const EXIT = 0b10000;
         const KILLABLE = Self::WAKEKILL.bits | Self::INTERRUPTIBLE.bits | Self::RUNNING.bits;
-        const SLEEPPING = Self::INTERRUPTIBLE.bits| Self::UNINTERRUPTIBLE.bits|Self::WAKEKILL.bits;
+        const SLEEPPING = Self::INTERRUPTIBLE.bits | Self::UNINTERRUPTIBLE.bits | Self::WAKEKILL.bits;
     }
 }
 
@@ -248,8 +248,6 @@ impl ThreadFuture {
 impl Future for ThreadFuture {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // crate::println!("thread polled");
-
         let this = self.project();
 
         if let ThreadFutureState::Exit = this.state {
@@ -282,6 +280,7 @@ impl Future for ThreadFuture {
                     // TODO: No need to reactivate if the current page table is this process
                     this.thread.proc().memory.read().activate();
                     let mut thread_ctx = this.thread.inner.write().context.clone();
+                    
                     let trap = unsafe { Box::from_raw(thread_ctx.run_user()) };
                     {
                         let mut thread_inner = this.thread.inner.write();

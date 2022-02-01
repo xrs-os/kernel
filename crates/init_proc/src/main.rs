@@ -3,7 +3,7 @@
 #![no_std]
 #![no_main]
 
-use syscall::{sys_openat, sys_write};
+use syscall::{sys_clone, sys_openat, sys_write};
 
 mod allocator;
 mod lang_items;
@@ -29,6 +29,13 @@ pub fn main() {
     ░░     ░░   ░░░░░░░   ░░░░░░░░        ░░     ░░ ░░░░░░░░  
 "#
         .as_bytes(),
+    );
+
+    let pid = sys_clone();
+    
+    sys_write(
+        _tty0,
+        "after".as_bytes()
     );
     loop {}
 }
