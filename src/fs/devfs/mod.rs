@@ -10,8 +10,8 @@ use crate::time::Timespec;
 
 use super::{mount_fs::NotDynInode, vfs, DirEntryName, FsStr};
 
-pub mod termios;
 pub mod dev_tty;
+pub mod termios;
 
 const DEV_ROOT_INODE_ID: vfs::InodeId = 1;
 

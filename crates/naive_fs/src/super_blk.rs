@@ -1,4 +1,6 @@
-use alloc::{boxed::Box, vec::Vec};
+use core::future;
+
+use alloc::vec::Vec;
 use bitmap::Bitmap;
 use futures_util::{future::Map, FutureExt};
 use sleeplock::{Mutex, MutexGuard};
@@ -9,7 +11,7 @@ use crate::{
     consts,
     inode::RawInode,
     maybe_dirty::{MaybeDirty, Syncable},
-    root_inode_id, scoped, Addr, BlkId, BlkSize, BoxFuture, Error, InodeId, Result,
+    root_inode_id, scoped, Addr, BlkId, BlkSize, Error, InodeId, Result,
 };
 use byte_struct::*;
 use future_ext::{WithArg1, WithArg1Ext, WithArg3, WithArg3Ext};
@@ -58,7 +60,7 @@ impl ToBytes for RawSuperBlk {
     }
 }
 
-#[derive(ByteStruct)]
+#[derive(ByteStruct, Default)]
 #[byte_struct_le]
 pub struct RawDescriptor {
     pub blk_bitmap: BlkId,
@@ -118,18 +120,6 @@ impl Default for RawSuperBlk {
     }
 }
 
-impl Default for RawDescriptor {
-    fn default() -> Self {
-        Self {
-            blk_bitmap: 0,
-            inode_bitmap: 0,
-            inode_table: 0,
-            free_blks_count: 0,
-            free_inodes_count: 0,
-        }
-    }
-}
-
 impl RawSuperBlk {
     pub fn blk_size(&self) -> BlkSize {
         BlkSize::with_blk_size_log2(self.blk_size_log2)
@@ -148,9 +138,21 @@ impl RawDescriptor {
     }
 }
 
-impl Syncable for RawSuperBlk {}
+impl<DK: Disk + Sync> Syncable<DK> for RawSuperBlk {
+    type SyncFut<'a> = impl future::Future<Output = Result<()>> + 'a;
 
-impl Syncable for RawDescriptor {}
+    fn sync<'a>(&'a self, _blk_device: &'a BlkDevice<DK>) -> Self::SyncFut<'a> {
+        async { Ok(()) }
+    }
+}
+
+impl<DK: Disk + Sync> Syncable<DK> for RawDescriptor {
+    type SyncFut<'a> = impl future::Future<Output = Result<()>> + 'a;
+
+    fn sync<'a>(&'a self, _blk_device: &'a BlkDevice<DK>) -> Self::SyncFut<'a> {
+        async { Ok(()) }
+    }
+}
 
 pub struct SuperBlk<MutexType> {
     pub raw_super_blk: MaybeDirty<RawSuperBlk>,
@@ -409,14 +411,14 @@ impl<MutexType> SuperBlk<MutexType> {
     }
 }
 
-impl<MutexType: lock_api::RawMutex<GuardMarker = lock_api::GuardSend> + Sync> Syncable
-    for SuperBlk<MutexType>
+impl<MutexType, DK: Disk + Sync> Syncable<DK> for SuperBlk<MutexType>
+where
+    MutexType: lock_api::RawMutex<GuardMarker = lock_api::GuardSend> + Sync,
 {
-    fn sync<'f, DK>(&'f self, blk_device: &'f BlkDevice<DK>) -> BoxFuture<'f, Result<()>>
-    where
-        DK: Disk + Sync,
-    {
-        Box::pin(async move {
+    type SyncFut<'a> = impl future::Future<Output = Result<()>> + 'a where MutexType: 'a;
+
+    fn sync<'a>(&'a self, blk_device: &'a BlkDevice<DK>) -> Self::SyncFut<'a> {
+        async move {
             let blk_id_allocator = scoped!(&self.blk_id_allocator).lock().await;
             let inode_id_allocator = scoped!(&self.inode_id_allocator).lock().await;
             let super_blk_is_dirty = self.raw_super_blk.is_dirty();
@@ -431,7 +433,7 @@ impl<MutexType: lock_api::RawMutex<GuardMarker = lock_api::GuardSend> + Sync> Sy
                 raw_descriptor.sync(blk_device).await?;
             }
             Ok(())
-        })
+        }
     }
 }
 

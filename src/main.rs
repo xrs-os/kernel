@@ -1,24 +1,20 @@
 #![feature(lang_items)]
-#![feature(global_asm)]
-#![feature(asm)]
-#![feature(const_generics, const_evaluatable_checked)]
 // make `std` available when testing
 // #![cfg_attr(not(test), no_std)]
 // #![cfg_attr(not(test), no_main)]
+#![feature(ready_macro)]
+#![feature(asm_const)]
 #![no_std]
 #![no_main]
-#![feature(const_fn_trait_bound)]
 #![feature(fn_align)]
-#![feature(stmt_expr_attributes)]
 #![feature(test)]
 #![feature(generic_associated_types)]
-#![feature(const_fn_fn_ptr_basics)]
 #![feature(linked_list_cursors)]
-#![feature(const_btree_new)]
-#![feature(maybe_uninit_extra)]
 #![feature(map_try_insert)]
+#![feature(stmt_expr_attributes)]
 #![allow(incomplete_features)]
 #![allow(dead_code)]
+#![feature(const_btree_new)]
 
 use arch::interrupt as interruptA;
 

@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 enum SyscallNum {
     Openat = 56,
     Close = 57,
@@ -101,7 +103,5 @@ pub fn sys_write(fd: isize, buf: &[u8]) -> usize {
 
 #[allow(dead_code)]
 pub fn sys_clone() -> usize {
-    unsafe {
-        syscall0(SyscallNum::Clone)
-    }
+    unsafe { syscall0(SyscallNum::Clone) }
 }

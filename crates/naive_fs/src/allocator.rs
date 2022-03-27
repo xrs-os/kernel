@@ -3,10 +3,10 @@ use bitmap::Bitmap;
 use crate::{
     blk_device::{BlkDevice, Disk, FromBytes, ToBytes},
     maybe_dirty::{MaybeDirty, Syncable},
-    BlkId, BoxFuture, Result,
+    BlkId, Result,
 };
 
-use alloc::boxed::Box;
+use core::future;
 
 pub(crate) struct Allocator {
     bitmap: MaybeDirty<Bitmap>,
@@ -83,16 +83,21 @@ impl Allocator {
     }
 }
 
-impl Syncable for Allocator {
-    fn sync<'a, DK>(&'a self, blk_device: &'a BlkDevice<DK>) -> BoxFuture<'a, Result<()>>
-    where
-        DK: Disk + Sync,
-    {
-        Box::pin(async move { self.bitmap.sync(blk_device).await })
+impl<DK: Disk + Sync> Syncable<DK> for Allocator {
+    type SyncFut<'a> = impl future::Future<Output = Result<()>> + 'a;
+
+    fn sync<'a>(&'a self, blk_device: &'a BlkDevice<DK>) -> Self::SyncFut<'a> {
+        async move { self.bitmap.sync(blk_device).await }
     }
 }
 
-impl Syncable for Bitmap {}
+impl<DK: Disk + Sync> Syncable<DK> for Bitmap {
+    type SyncFut<'a> = impl future::Future<Output = Result<()>> + 'a;
+
+    fn sync<'a>(&'a self, _blk_device: &'a BlkDevice<DK>) -> Self::SyncFut<'a> {
+        async { Ok(()) }
+    }
+}
 
 impl FromBytes for Bitmap {
     const BYTES_LEN: usize = 0;

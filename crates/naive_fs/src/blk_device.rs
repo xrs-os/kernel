@@ -29,10 +29,16 @@ pub trait ToBytes {
     fn to_bytes(&self, out: &mut [u8]);
 }
 
-pub trait Disk {
-    type ReadAtFut<'a>: Future<Output = DiskResult<u32>> + Send + 'a;
-    type WriteAtFut<'a>: Future<Output = DiskResult<u32>> + Send + 'a;
-    type SyncFut<'a>: Future<Output = DiskResult<()>> + Send + 'a;
+pub trait Disk: 'static {
+    type ReadAtFut<'a>: Future<Output = DiskResult<u32>> + Send + 'a
+    where
+        Self: 'a;
+    type WriteAtFut<'a>: Future<Output = DiskResult<u32>> + Send + 'a
+    where
+        Self: 'a;
+    type SyncFut<'a>: Future<Output = DiskResult<()>> + Send + 'a
+    where
+        Self: 'a;
 
     fn read_at<'a>(&'a self, offset: u32, buf: &'a mut [u8]) -> Self::ReadAtFut<'a>;
 
@@ -55,6 +61,11 @@ pub type ReadValAtFut<'a, T, DK> =
     Map<WithArg1<ReadAtFut<'a, DK>, Vec<u8>>, fn((Result<u32>, Vec<u8>)) -> Result<T>>;
 
 type WriteAtFut<'a, DK> = MapErr<<DK as Disk>::WriteAtFut<'a>, fn(DiskError) -> Error>;
+
+pub type WriteValueAtFut<'a, DK> = Map<
+    WithArg1<Either<Ready<Result<u32>>, WriteAtFut<'a, DK>>, Vec<u8>>,
+    fn((Result<u32>, Vec<u8>)) -> Result<()>,
+>;
 
 pub type ReadBytesFut<'a, DK> =
     Map<WithArg1<ReadAtFut<'a, DK>, Vec<u8>>, fn((Result<u32>, Vec<u8>)) -> Result<Vec<u8>>>;
@@ -149,15 +160,11 @@ impl<DK: Disk> BlkDevice<DK> {
         )
     }
 
-    #[allow(clippy::type_complexity)]
     pub fn write_value_at<'a, T: ToBytes>(
         &'a self,
         addr: Addr,
         val: &'a T,
-    ) -> Map<
-        WithArg1<Either<Ready<Result<u32>>, WriteAtFut<'a, DK>>, Vec<u8>>,
-        fn((Result<u32>, Vec<u8>)) -> Result<()>,
-    > {
+    ) -> WriteValueAtFut<'a, DK> {
         let mut bytes = vec![0; val.bytes_len()];
         val.to_bytes(&mut bytes);
         self.write_at(addr, unsafe {

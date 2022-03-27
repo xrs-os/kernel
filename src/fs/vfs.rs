@@ -394,8 +394,12 @@ bitflags! {
 pub trait Filesystem: Send + Sync {
     type Inode: Inode<FS = Self>;
 
-    type CreateInodeFut<'a>: Future<Output = Result<Self::Inode>> + Send + 'a;
-    type LoadInodeFut<'a>: Future<Output = Result<Option<Self::Inode>>> + Send + 'a;
+    type CreateInodeFut<'a>: Future<Output = Result<Self::Inode>> + Send + 'a
+    where
+        Self: 'a;
+    type LoadInodeFut<'a>: Future<Output = Result<Option<Self::Inode>>> + Send + 'a
+    where
+        Self: 'a;
 
     fn root_dir_entry_raw(&self) -> RawDirEntry;
 
@@ -420,22 +424,54 @@ pub trait Filesystem: Send + Sync {
 
 pub trait Inode: Send + Sync {
     type FS: Filesystem<Inode = Self>;
-    type MetadataFut<'a>: Future<Output = Result<Metadata>> + Send + 'a;
-    type ChownFut<'a>: Future<Output = Result<()>> + Send + 'a;
-    type ChmodFut<'a>: Future<Output = Result<()>> + Send + 'a;
-    type LinkFut<'a>: Future<Output = Result<()>> + Send + 'a;
-    type UnlinkFut<'a>: Future<Output = Result<()>> + Send + 'a;
-    type ReadAtFut<'a>: Future<Output = Result<usize>> + Send + 'a;
-    type WriteAtFut<'a>: Future<Output = Result<usize>> + Send + 'a;
-    type SyncFut<'a>: Future<Output = Result<()>> + Send + 'a;
-    type AppendDotFut<'a>: Future<Output = Result<()>> + Send + 'a;
-    type LookupRawFut<'a>: Future<Output = Result<Option<RawDirEntry>>> + Send + 'a;
-    type LookupFut<'a>: Future<Output = Result<Option<DirEntry<Self::FS>>>> + Send + 'a;
-    type AppendFut<'a>: Future<Output = Result<()>> + Send + 'a;
-    type RemoveFut<'a>: Future<Output = Result<Option<RawDirEntry>>> + Send + 'a;
-    type LsRawFut<'a>: Future<Output = Result<Vec<RawDirEntry>>> + Send + 'a;
-    type LsFut<'a>: Future<Output = Result<Vec<DirEntry<Self::FS>>>> + Send + 'a;
-    type IOCtlFut<'a>: Future<Output = Result<()>> + Send + 'a;
+    type MetadataFut<'a>: Future<Output = Result<Metadata>> + Send + 'a
+    where
+        Self: 'a;
+    type ChownFut<'a>: Future<Output = Result<()>> + Send + 'a
+    where
+        Self: 'a;
+    type ChmodFut<'a>: Future<Output = Result<()>> + Send + 'a
+    where
+        Self: 'a;
+    type LinkFut<'a>: Future<Output = Result<()>> + Send + 'a
+    where
+        Self: 'a;
+    type UnlinkFut<'a>: Future<Output = Result<()>> + Send + 'a
+    where
+        Self: 'a;
+    type ReadAtFut<'a>: Future<Output = Result<usize>> + Send + 'a
+    where
+        Self: 'a;
+    type WriteAtFut<'a>: Future<Output = Result<usize>> + Send + 'a
+    where
+        Self: 'a;
+    type SyncFut<'a>: Future<Output = Result<()>> + Send + 'a
+    where
+        Self: 'a;
+    type AppendDotFut<'a>: Future<Output = Result<()>> + Send + 'a
+    where
+        Self: 'a;
+    type LookupRawFut<'a>: Future<Output = Result<Option<RawDirEntry>>> + Send + 'a
+    where
+        Self: 'a;
+    type LookupFut<'a>: Future<Output = Result<Option<DirEntry<Self::FS>>>> + Send + 'a
+    where
+        Self: 'a;
+    type AppendFut<'a>: Future<Output = Result<()>> + Send + 'a
+    where
+        Self: 'a;
+    type RemoveFut<'a>: Future<Output = Result<Option<RawDirEntry>>> + Send + 'a
+    where
+        Self: 'a;
+    type LsRawFut<'a>: Future<Output = Result<Vec<RawDirEntry>>> + Send + 'a
+    where
+        Self: 'a;
+    type LsFut<'a>: Future<Output = Result<Vec<DirEntry<Self::FS>>>> + Send + 'a
+    where
+        Self: 'a;
+    type IOCtlFut<'a>: Future<Output = Result<()>> + Send + 'a
+    where
+        Self: 'a;
 
     fn id(&self) -> InodeId;
 

@@ -17,6 +17,7 @@ pub struct RamBlkDevice {
 impl RamBlkDevice {
     /// Constructs a new, empty `RamBlkDevice`.
     #[allow(dead_code)]
+    #[allow(clippy::uninit_vec)]
     pub fn new(blk_size: blk::BlkSize, blk_count: usize) -> Self {
         let mut data = Vec::with_capacity(blk_count);
         unsafe { data.set_len(blk_count) };

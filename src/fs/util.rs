@@ -2,6 +2,7 @@ use alloc::vec::Vec;
 
 use super::{vfs::Result, Inode};
 
+#[allow(clippy::uninit_vec)]
 pub async fn read_all(file: Inode) -> Result<Vec<u8>> {
     let size = file.metadata().await?.size as usize;
     let mut buf = Vec::with_capacity(size);

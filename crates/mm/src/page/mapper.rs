@@ -42,7 +42,7 @@ where
     MutexType: lock_api::RawMutex,
     A: Allocator,
     Param: PageParam,
-    [(); Param::PAGE_LEVELS]: ,
+    [(); Param::PAGE_LEVELS]:,
 {
     /// Create a new PageMapper.
     pub fn create(allocator: &'a LockedAllocator<MutexType, A>) -> Result<Self> {
@@ -123,29 +123,29 @@ where
     }
 
     /// # Safety
-    pub unsafe fn unmap(&mut self, page: &Page) -> Result<Option<(FlushGuard<Param>, Frame)>> {
+    pub unsafe fn unmap(&mut self, page1: &Page) -> Result<Option<(FlushGuard<Param>, Frame)>> {
         let mut tab = self.root_table();
-        for &pte_idx in Param::pte_idxs(page.start()).iter() {
+        for &pte_idx in Param::pte_idxs(page1.start()).iter() {
             let mut pte = tab
                 .get_entry(pte_idx)
-                .ok_or_else(|| Error::InvalidVirtualAddress(page.start()))?;
+                .ok_or_else(|| Error::InvalidVirtualAddress(page1.start()))?;
 
             match pte.next_page_table() {
                 Ok(next) => tab = next,
                 Err(NextPageError::Invalid) => {
-                    return Err(Error::InvalidVirtualAddress(page.start()));
+                    return Err(Error::InvalidVirtualAddress(page1.start()));
                 }
                 Err(NextPageError::NoNext) => {
                     // This is already a leaf node
                     return Ok(if pte.free(self.allocator) {
-                        Some((FlushGuard::new(self.asid, page.clone()), pte.frame()))
+                        Some((FlushGuard::new(self.asid, page1.clone()), pte.frame()))
                     } else {
                         None
                     });
                 }
             }
         }
-        Err(Error::InvalidVirtualAddress(page.start()))
+        Err(Error::InvalidVirtualAddress(page1.start()))
     }
 
     pub fn free_page_table(&mut self) -> FlushAllGuard<Param> {

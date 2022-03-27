@@ -1,5 +1,4 @@
 #![feature(lang_items)]
-#![feature(asm)]
 #![no_std]
 #![no_main]
 
@@ -31,12 +30,8 @@ pub fn main() {
         .as_bytes(),
     );
 
-    let pid = sys_clone();
-    
-    sys_write(
-        _tty0,
-        "after".as_bytes()
-    );
+    let _pid = sys_clone();
+
+    sys_write(_tty0, "after".as_bytes());
     loop {}
 }
-

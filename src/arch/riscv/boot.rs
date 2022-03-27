@@ -1,4 +1,5 @@
 use crate::kmain;
+use core::arch::{asm, global_asm};
 
 const BOOT_STACK_SIZE: usize = (1 << 16) * 8;
 

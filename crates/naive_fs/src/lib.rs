@@ -1,7 +1,7 @@
 #![feature(generic_associated_types)]
-#![feature(async_stream)]
-#![feature(iter_map_while)]
 #![feature(new_uninit)]
+#![feature(ready_macro)]
+#![feature(type_alias_impl_trait)]
 #![no_std]
 
 use core::{marker::PhantomData, ops};

@@ -33,8 +33,8 @@ where
     MutexType: lock_api::RawMutex,
     A: Allocator,
     Param: PageParam,
-    [(); Param::PAGE_LEVELS]: ,
-    [(); Param::PAGE_SIZE]: ,
+    [(); Param::PAGE_LEVELS]:,
+    [(); Param::PAGE_SIZE]:,
 {
     pub fn new(page_mapper: PageMapper<'a, MutexType, A, Param>) -> Self {
         Self {
@@ -137,8 +137,8 @@ impl Segment {
         MutexType: lock_api::RawMutex,
         A: Allocator,
         Param: PageParam,
-        [(); Param::PAGE_LEVELS]: ,
-        [(); Param::PAGE_SIZE]: ,
+        [(); Param::PAGE_LEVELS]:,
+        [(); Param::PAGE_SIZE]:,
     {
         unsafe {
             match self.map_type {
@@ -194,8 +194,8 @@ impl Segment {
         MutexType: lock_api::RawMutex,
         A: Allocator,
         Param: PageParam,
-        [(); Param::PAGE_LEVELS]: ,
-        [(); Param::PAGE_SIZE]: ,
+        [(); Param::PAGE_LEVELS]:,
+        [(); Param::PAGE_SIZE]:,
     {
         match self.map_type {
             MapType::Linear => {

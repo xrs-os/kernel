@@ -324,7 +324,7 @@ impl Signal {
         thread: &Arc<Thread>,
         thread_inner: &mut ThreadInner,
     ) -> Poll<bool> {
-        let mut interr_ctx = &mut thread_inner.context;
+        let interr_ctx = &mut thread_inner.context;
         if let Some((act, info)) = ready!(self.get_signal(thread)) {
             let signo = info.sig;
             let (sig_sp, info_user_ptr) = if act.flags.contains(SigActionFlags::SIGINFO) {
@@ -340,7 +340,7 @@ impl Signal {
             };
             thread_inner.sig_ctx = Some(sig_ctx);
             set_signal_handler(
-                &mut interr_ctx,
+                interr_ctx,
                 sig_sp,
                 act.handler().as_usize(),
                 act.flags,

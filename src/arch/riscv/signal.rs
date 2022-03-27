@@ -1,6 +1,6 @@
-use core::mem;
-
 use crate::proc::signal;
+use core::arch::asm;
+use core::mem;
 
 use super::interrupt;
 

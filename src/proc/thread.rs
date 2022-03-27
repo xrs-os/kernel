@@ -131,15 +131,19 @@ impl Thread {
     }
 
     pub async fn fork(self: &Arc<Thread>, new_inner: ThreadInner) -> Result<Self> {
+        crate::println!("fork");
         let tid = tid::alloc().ok_or(Error::ThreadIdNotEnough)?;
+        crate::println!("fork2");
+
+        let proc = MaybeUninit::new(Arc::new(
+            self.proc()
+                .fork(*tid.id() as usize, self.clone())
+                .await
+                .map_err(Error::MemoryErr)?,
+        ));
 
         Ok(Self {
-            proc: MaybeUninit::new(Arc::new(
-                self.proc()
-                    .fork(*tid.id() as usize, self.clone())
-                    .await
-                    .map_err(Error::MemoryErr)?,
-            )),
+            proc,
             cmd: self.cmd.clone(),
             tid,
             flags: AtomicU8::new(0),
@@ -280,7 +284,7 @@ impl Future for ThreadFuture {
                     // TODO: No need to reactivate if the current page table is this process
                     this.thread.proc().memory.read().activate();
                     let mut thread_ctx = this.thread.inner.write().context.clone();
-                    
+
                     let trap = unsafe { Box::from_raw(thread_ctx.run_user()) };
                     {
                         let mut thread_inner = this.thread.inner.write();

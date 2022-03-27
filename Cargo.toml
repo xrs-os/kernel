@@ -35,7 +35,7 @@ sleeplock = { path = "crates/sleeplock" }
 future_ext = { path = "crates/future_ext" }
 # [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
 riscv = "0.6"
-virtio-drivers = { git = "https://github.com/xrs-os/virtio-drivers.git", branch = "master" }
+virtio-drivers = { git = "https://github.com/xrs-os/virtio-drivers.git", branch = "main" }
 log = "0.4"
 mm = { path = "crates/mm" }
 executor = { path = "crates/executor", features = ["fifo"] }

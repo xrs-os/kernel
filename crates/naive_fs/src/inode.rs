@@ -51,7 +51,13 @@ pub struct RawInode {
     pub indirect_blk: BlkId,
 }
 
-impl Syncable for RawInode {}
+impl<DK: Disk + Sync> Syncable<DK> for RawInode {
+    type SyncFut<'a> = impl core::future::Future<Output = Result<()>> + 'a;
+
+    fn sync<'a>(&'a self, _blk_device: &'a BlkDevice<DK>) -> Self::SyncFut<'a> {
+        async { Ok(()) }
+    }
+}
 
 impl FromBytes for RawInode {
     const BYTES_LEN: usize = Self::BYTE_LEN;
@@ -530,27 +536,29 @@ where
     DK: Disk + Sync + Send,
 {
     pub fn sync(&self) -> BoxFuture<Result<()>> {
-        <Self as Syncable>::sync(self, scoped!(self.blk_device()))
+        Box::pin(<Self as Syncable<_>>::sync(
+            self,
+            scoped!(self.blk_device()),
+        ))
     }
 }
 
-impl<MutexType, DK> Syncable for Inode<MutexType, DK>
+impl<MutexType, DK> Syncable<DK> for Inode<MutexType, DK>
 where
     MutexType: lock_api::RawMutex<GuardMarker = lock_api::GuardSend> + Sync + Send,
-    DK: Sync + Send,
+    DK: Disk + Sync + Send,
 {
-    fn sync<'a, D>(&'a self, blk_device: &'a BlkDevice<D>) -> BoxFuture<'a, Result<()>>
-    where
-        D: Disk + Sync,
-    {
+    type SyncFut<'a> = impl core::future::Future<Output = Result<()>> + 'a where MutexType: 'a;
+
+    fn sync<'a>(&'a self, blk_device: &'a BlkDevice<DK>) -> Self::SyncFut<'a> {
         // https://users.rust-lang.org/t/why-need-send-when-immutably-borrow-t-in-the-async-block/60934
         let Self { raw, naive_fs, .. } = self;
 
-        Box::pin(async move {
+        async move {
             raw.read().await.sync(blk_device).await?;
             scoped!(&naive_fs.super_blk).sync(blk_device).await?;
             blk_device.sync().await
-        })
+        }
     }
 }
 

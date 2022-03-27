@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 mod boot;
 pub mod consts;
 pub mod interrupt;
