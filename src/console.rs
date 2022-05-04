@@ -152,13 +152,13 @@ mod vga {
 mod nographic {
 
     use super::ColorCode;
-    use crate::arch;
+    use crate::{arch, spinlock};
     use core::{fmt, option::Option};
 
-    static mut PRINTER: Option<spin::Mutex<fn(c: u8)>> = None;
+    static mut PRINTER: Option<spinlock::MutexIrq<fn(c: u8)>> = None;
 
     pub fn init() {
-        unsafe { PRINTER = Some(spin::Mutex::new(arch::putchar)) }
+        unsafe { PRINTER = Some(spinlock::MutexIrq::new(arch::putchar)) }
     }
 
     pub(crate) fn _print(args: fmt::Arguments, _color_code: Option<ColorCode>) {

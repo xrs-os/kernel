@@ -173,6 +173,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "debug"
+version = "0.1.0"
+
+[[package]]
 name = "device_tree"
 version = "1.0.3"
 source = "git+https://github.com/rcore-os/device_tree-rs#4e8144baa29c12351789ef5ca76f6a46cc042160"
@@ -195,6 +199,7 @@ name = "executor"
 version = "0.1.0"
 dependencies = [
  "crossbeam-queue",
+ "debug",
  "lock_api",
 ]
 
@@ -398,6 +403,7 @@ dependencies = [
 name = "mm"
 version = "0.1.0"
 dependencies = [
+ "debug",
  "lock_api",
  "riscv",
 ]

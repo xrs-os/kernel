@@ -1,6 +1,6 @@
 #![no_std]
 
-use core::future::Future;
+use core::{future::Future, fmt::Debug};
 extern crate alloc;
 
 // executor implementation
@@ -10,7 +10,7 @@ extern crate alloc;
 pub mod fifo;
 
 pub trait ThreadFuture: Future + 'static {
-    type ID: Clone + Ord + Send + Sync;
+    type ID: Clone + Ord + Send + Sync + Debug;
 
     type Thread: Clone;
 

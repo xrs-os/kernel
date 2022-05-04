@@ -10,7 +10,7 @@ pub fn init() {
     unsafe { CPUS = MaybeUninit::new(Cpus::new()) }
 }
 
-/// push_off 和 pop_off for disable and enable interrupts
+/// push_off and pop_off for disable and enable interrupts
 /// They are matched，To undo 2 push_off operations, 2 pop_off operations are required
 /// In addition, the push_off and pop_off operations will return to the original interrupt state when the pair completes
 pub fn push_off() {

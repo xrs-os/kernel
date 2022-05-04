@@ -61,5 +61,6 @@ members = [
     "crates/executor",
     "crates/num_enum",
     "crates/init_proc",
+    "crates/debug",
     "mkfs",
 ]

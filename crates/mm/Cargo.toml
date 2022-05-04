@@ -9,3 +9,6 @@ edition = "2018"
 lock_api = { version="0.4", features=["nightly"] }
 # [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
 riscv = "0.6"
+debug = { path = "../debug" }
+
+[dev-dependencies]

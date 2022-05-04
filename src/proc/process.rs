@@ -156,7 +156,6 @@ impl Proc {
                 } else {
                     return Err(Error::ElfErr("unsupported elf format"));
                 };
-
             let mut flags = 0;
             if ph.flags().is_read() {
                 flags |= PageParamA::FLAG_PTE_READABLE;
@@ -188,10 +187,6 @@ impl Proc {
     }
 
     pub async fn fork(&self, asid: usize, main_thread: Arc<Thread>) -> MemoryResult<Self> {
-        crate::println!("33");
-        //let memory = RwLockIrq::new(self.memory.read().borrow_memory(asid)?);
-        let signal = MutexIrq::new(self.signal.lock().fork());
-        crate::println!("44");
         Ok(Self {
             id: *main_thread.id(),
             main_thread,
@@ -203,7 +198,7 @@ impl Proc {
             cwd: crate::sleeplock::RwLock::new(self.cwd.read().await.clone()),
             open_files: self.open_files.clone(),
             memory: RwLockIrq::new(self.memory.read().borrow_memory(asid)?),
-            signal,
+            signal: MutexIrq::new(self.signal.lock().fork()),
         })
     }
 

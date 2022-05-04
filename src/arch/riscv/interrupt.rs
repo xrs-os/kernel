@@ -57,6 +57,13 @@ impl Context {
     }
 
     pub fn run_user(&mut self) -> *mut Trap {
+        let mut sstatus: usize;
+        unsafe { asm!("csrr {}, sstatus", out(reg) sstatus) };
+        // Set spp to user
+        sstatus &= !(1 << 8);
+        // Set spie bit to 1, cpu will turn on interrupts after executing sret
+        sstatus |= 1 << 5;
+        self.sstatus = sstatus;
         let trap = unsafe { _run_user(self) };
         unsafe {
             if let Trap::Syscall = *trap {
@@ -81,16 +88,10 @@ pub enum Trap {
 
 impl Default for Context {
     fn default() -> Self {
-        let mut sstatus: usize;
-        unsafe { asm!("csrr {}, sstatus", out(reg) sstatus) };
-        // Set spp to user
-        sstatus &= !(1 << 8);
-        // Set spie bit to 1, cpu will turn on interrupts after executing sret
-        sstatus |= 1 << 5;
         #[rustfmt::skip]
         Self {
             epc: 0,
-            sstatus,
+            sstatus: 0,
             ra: 0, sp: 0,  gp: 0,  tp: 0,
             t0: 0, t1: 0,  t2: 0,  s0: 0,
             s1: 0, a0: 0,  a1: 0,  a2: 0,
@@ -170,7 +171,12 @@ extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
             Trap::Interrupt
         }
         scause::Trap::Exception(scause::Exception::UserEnvCall) => Trap::Syscall,
-        _ => Trap::Other,
+        _ => {
+            crate::println!("ucause: {:?}", scause.cause());
+            crate::println!("ustval: 0x{:x}", _stval);
+            crate::println!("usepc: 0x{:x}", riscv::register::sepc::read());
+            Trap::Other
+        }
     }))
 }
 
@@ -187,7 +193,11 @@ extern "C" fn kernel_trap_handler(_ctx: &mut Context) {
             set_next_timer_interrupt();
         }
         scause::Trap::Interrupt(scause::Interrupt::SupervisorExternal) => external_handler(),
-        _ => {}
+        _ => {
+            crate::println!("kernal cause: {:?}", scause.cause());
+            crate::println!("kernal stval: 0x{:x}", _stval);
+            crate::println!("kernal sepc: 0x{:x}", riscv::register::sepc::read());
+        }
     }
 }
 

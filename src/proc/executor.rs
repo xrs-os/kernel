@@ -10,19 +10,18 @@ use alloc::{sync::Arc, task::Wake};
 use executor::fifo::FIFOExecutor;
 use futures_util::pin_mut;
 
-use crate::{arch::interrupt, spinlock::MutexIrq};
+use crate::arch::interrupt;
 
 use super::thread::{Thread, ThreadFuture};
 
-static mut GLOBAL_EXECUTOR: MaybeUninit<FIFOExecutor<MutexIrq<()>, ThreadFuture>> =
-    MaybeUninit::uninit();
+static mut GLOBAL_EXECUTOR: MaybeUninit<FIFOExecutor<ThreadFuture>> = MaybeUninit::uninit();
 
 pub fn init() {
     unsafe { GLOBAL_EXECUTOR = MaybeUninit::new(FIFOExecutor::new(100)) }
 }
 
-fn executor() -> &'static FIFOExecutor<MutexIrq<()>, ThreadFuture> {
-    unsafe { GLOBAL_EXECUTOR.assume_init_ref() }
+fn executor() -> &'static mut FIFOExecutor<ThreadFuture> {
+    unsafe { GLOBAL_EXECUTOR.assume_init_mut() }
 }
 
 pub fn spawn(thread: ThreadFuture) -> Option<()> {

@@ -2,6 +2,10 @@
 #![no_std]
 #![no_main]
 
+#[macro_use]
+extern crate alloc;
+
+use alloc::format;
 use syscall::{sys_clone, sys_openat, sys_write};
 
 mod allocator;
@@ -18,7 +22,7 @@ pub fn main() {
     sys_write(
         _tty0,
         r#"
-    ██     ██   ███████    ████████       ███████    ████████
+    ██      ██   ███████    ████████       ███████    ████████
     ░░██   ██   ██░░░░░██  ██░░░░░░       ░██░░░░██  ██░░░░░░ 
      ░░██ ██   ██     ░░██░██             ░██   ░██ ░██       
       ░░███   ░██      ░██░█████████ █████░███████  ░█████████
@@ -30,8 +34,9 @@ pub fn main() {
         .as_bytes(),
     );
 
-    let _pid = sys_clone();
+    let pid = sys_clone();
 
     sys_write(_tty0, "after".as_bytes());
+    sys_write(_tty0, format!("pid: {}", pid).as_bytes());
     loop {}
 }

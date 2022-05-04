@@ -46,6 +46,7 @@ where
 
     pub fn borrow_memory(&self, asid: usize) -> Result<Self> {
         let new_page_mapper = self.page_mapper.borrow_memory(asid)?;
+
         Ok(Self {
             kernel_segments: self.kernel_segments.clone(),
             user_segments: self.user_segments.clone(),
@@ -152,7 +153,8 @@ impl Segment {
                     for page in self.page_iter::<{ Param::PAGE_SIZE }>() {
                         let mut page_init_data = [0; { Param::PAGE_SIZE }];
 
-                        if !init_data.is_empty() {
+                        let start_pos = page.start().0 as isize - self.addr_range.start.0 as isize;
+                        if !init_data.is_empty() && start_pos < init_data.len() as isize {
                             // segment.addr_range.start may not be aligned to page size.
                             let page_init_data_start = if self.addr_range.start.0 > page.start().0 {
                                 self.addr_range.start.0 - page.start().0
@@ -163,12 +165,12 @@ impl Segment {
                             let init_data_start =
                                 page.start().0 + page_init_data_start - self.addr_range.start.0;
 
-                            let init_data_end = page.start().0
-                                + Param::PAGE_SIZE.min(self.addr_range.end.0 - page.start().0)
-                                - self.addr_range.start.0;
+                            let init_data_end = init_data_start
+                                + (Param::PAGE_SIZE - page_init_data_start)
+                                    .min(self.addr_range.end.0 - page.start().0)
+                                    .min(init_data.len() - init_data_start);
 
                             let buf = &init_data[init_data_start..init_data_end];
-
                             (&mut page_init_data
                                 [page_init_data_start..page_init_data_start + buf.len()])
                                 .copy_from_slice(buf);

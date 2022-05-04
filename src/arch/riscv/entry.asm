@@ -15,11 +15,11 @@ _start:
     # a0 == hartid
 
     # set sp
-    # sp = _bootstack + (hartid + 1) * (2^16)
+    # sp = _bootstack + (hartid + 1) * (2^17)
     lui     sp, %hi(_bootstack)
     addi    sp, sp, %lo(_bootstack)
     addi    t0, a0, 1
-    slli    t0, t0, 16
+    slli    t0, t0, 17
     add     sp, sp, t0
 
     # Jump to _boot (Absolute address)

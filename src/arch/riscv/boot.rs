@@ -1,7 +1,8 @@
 use crate::kmain;
 use core::arch::{asm, global_asm};
 
-const BOOT_STACK_SIZE: usize = (1 << 16) * 8;
+// TODO `8` use config
+const BOOT_STACK_SIZE: usize = (1 << 17) * 8;
 
 #[repr(C)]
 struct BootStack([u8; BOOT_STACK_SIZE]);

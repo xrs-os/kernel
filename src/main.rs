@@ -60,7 +60,11 @@ fn kmain(_hartid: usize, dtb_pa: usize) {
 
     loop {
         proc::executor::run_ready_tasks();
-        unsafe { interruptA::wfi() };
+        unsafe {
+            // When there is no task in the operating system,
+            // it is necessary to turn on interrupts to allow external interrupts so that wake can be called
+            interruptA::enable_and_wfi();
+        };
     }
 }
 

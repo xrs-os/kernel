@@ -8,31 +8,30 @@ const TASK_QUEUE_FULL: &str = "task_queue full";
 
 type Tasks<TF> = BTreeMap<<TF as ThreadFuture>::ID, (TF, Option<Waker>)>;
 
-pub struct FIFOExecutor<MutexType, TF: ThreadFuture> {
-    tasks: lock_api::Mutex<MutexType, Tasks<TF>>,
+pub struct FIFOExecutor<TF: ThreadFuture> {
+    tasks: Tasks<TF>,
     task_queue: Arc<ArrayQueue<TF::ID>>,
 }
 
-impl<MutexType, TF> FIFOExecutor<MutexType, TF>
+impl<TF> FIFOExecutor<TF>
 where
-    MutexType: lock_api::RawMutex,
     TF: ThreadFuture,
 {
     pub fn new(queue_size: usize) -> Self {
         Self {
-            tasks: lock_api::Mutex::new(BTreeMap::new()),
+            tasks: BTreeMap::new(),
             task_queue: Arc::new(ArrayQueue::new(queue_size)),
         }
     }
 
     /// Returns the thread corresponding to the tid.
     pub fn thread(&self, tid: &TF::ID) -> Option<TF::Thread> {
-        self.tasks.lock().get(tid).map(|(x, _)| x.thread().clone())
+        self.tasks.get(tid).map(|(x, _)| x.thread().clone())
     }
 
-    pub fn spawn(&self, thread_fut: TF) -> Option<()> {
+    pub fn spawn(&mut self, thread_fut: TF) -> Option<()> {
         let task_id = thread_fut.id().clone();
-        let mut tasks = self.tasks.lock();
+        let tasks = &mut self.tasks;
 
         if tasks.len() >= self.task_queue.capacity() {
             return None;
@@ -44,10 +43,9 @@ where
         self.task_queue.push(task_id).map_or(Some(()), |_| None)
     }
 
-    pub fn run_ready_tasks(&self) {
+    pub fn run_ready_tasks(&mut self) {
         let Self { tasks, task_queue } = self;
         while let Some(task_id) = task_queue.pop() {
-            let mut tasks = tasks.lock();
             let (thread, waker_opt) = match tasks.get_mut(&task_id) {
                 Some(tup) => tup,
                 None => continue,
@@ -56,7 +54,8 @@ where
             let waker = match waker_opt {
                 Some(ref waker) => waker,
                 None => {
-                    *waker_opt = Some(self.waker(&task_id));
+                    *waker_opt =
+                        Some(TaskWaker::<TF>::new(task_id.clone(), task_queue.clone()).waker());
                     waker_opt.as_ref().unwrap()
                 }
             };
