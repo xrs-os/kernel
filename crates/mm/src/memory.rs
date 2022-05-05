@@ -145,7 +145,7 @@ impl Segment {
             match self.map_type {
                 MapType::Linear => {
                     for page in self.page_iter::<{ Param::PAGE_SIZE }>() {
-                        let frame = Frame::of_addr(Param::linear_virt_to_phys(page.start()));
+                        let frame = Frame::of_addr(Param::linear_kvirt_to_phys(page.start()));
                         page_mapper.map(&page, &frame, self.flags)?.ignore()
                     }
                 }

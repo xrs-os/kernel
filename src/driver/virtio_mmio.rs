@@ -19,7 +19,7 @@ pub fn virtio_probe(node: &device_tree::Node) {
         _ => return,
     };
     let pa = PhysicalAddress(reg.as_slice().read_be_u64(0).unwrap() as usize);
-    let va = PageParamA::linear_phys_to_virt(pa);
+    let va = PageParamA::linear_phys_to_kvirt(pa);
     let header = unsafe { &mut *(va.0 as *mut virtio_drivers::VirtIOHeader) };
     if !header.verify() {
         return;
@@ -71,10 +71,10 @@ extern "C" fn virtio_dma_dealloc(paddr: usize, pages: usize) -> i32 {
 
 #[no_mangle]
 extern "C" fn virtio_phys_to_virt(paddr: usize) -> usize {
-    PageParamA::linear_phys_to_virt(PhysicalAddress::new(paddr)).inner()
+    PageParamA::linear_phys_to_kvirt(PhysicalAddress::new(paddr)).inner()
 }
 
 #[no_mangle]
 extern "C" fn virtio_virt_to_phys(vaddr: usize) -> usize {
-    PageParamA::linear_virt_to_phys(VirtualAddress::new(vaddr)).inner()
+    PageParamA::linear_kvirt_to_phys(VirtualAddress::new(vaddr)).inner()
 }

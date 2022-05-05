@@ -60,12 +60,17 @@ impl crate::page::PageParam for PageParamSv39 {
 
     #[inline(always)]
     fn create_pte(addr: PhysicalAddress, flags: Flag) -> usize {
-        (addr.0 >> 2) | flags
+        ((addr.0 >> 2) & 0x3F_FFFF_FFFF_FC00) | flags
     }
 
     #[inline(always)]
     fn create_nonleaf_pte(addr: PhysicalAddress) -> usize {
-        (addr.0 >> 2) | Self::FLAG_PTE_VALID
+        ((addr.0 >> 2) & 0x3F_FFFF_FFFF_FC00) | Self::FLAG_PTE_VALID
+    }
+
+    #[inline(always)]
+    fn pte_is_kernel(pte: usize) -> bool {
+        (pte & (1 << 4)) == 0
     }
 
     #[inline(always)]

@@ -14,5 +14,5 @@ pub fn init() {
     tid::init();
     executor::init();
     let init_proc = process::create_init_proc();
-    executor::spawn(thread_future(init_proc.main_thread.clone()));
+    let _ = executor::spawn(thread_future(init_proc.main_thread.clone()));
 }

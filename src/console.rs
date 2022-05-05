@@ -82,7 +82,7 @@ mod vga {
 
     impl Writer {
         pub fn new(default_color_code: Option<ColorCode>) -> Self {
-            let buf_va = PageParamA::linear_phys_to_virt(PhysicalAddress(0xb8000));
+            let buf_va = PageParamA::linear_phys_to_kvirt(PhysicalAddress(0xb8000));
             Self {
                 col: 0,
                 default_color_code: default_color_code

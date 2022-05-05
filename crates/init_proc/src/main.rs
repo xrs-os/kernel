@@ -35,8 +35,6 @@ pub fn main() {
     );
 
     let pid = sys_clone();
-
-    sys_write(_tty0, "after".as_bytes());
-    sys_write(_tty0, format!("pid: {}", pid).as_bytes());
+    sys_write(_tty0, format!("pid: {}\n", pid).as_bytes());
     loop {}
 }

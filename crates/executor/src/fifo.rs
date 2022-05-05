@@ -32,15 +32,14 @@ where
     pub fn spawn(&mut self, thread_fut: TF) -> Option<()> {
         let task_id = thread_fut.id().clone();
         let tasks = &mut self.tasks;
+        self.task_queue
+            .push(task_id.clone())
+            .map_or(None, |_| Some(()))?;
 
-        if tasks.len() >= self.task_queue.capacity() {
-            return None;
-        }
-
-        if tasks.insert(task_id.clone(), (thread_fut, None)).is_some() {
+        if tasks.insert(task_id, (thread_fut, None)).is_some() {
             panic!("task with same ID already in tasks");
         }
-        self.task_queue.push(task_id).map_or(Some(()), |_| None)
+        Some(())
     }
 
     pub fn run_ready_tasks(&mut self) {

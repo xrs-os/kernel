@@ -20,7 +20,7 @@ extern "C" {
 }
 
 pub fn memory_range() -> (PhysicalAddress, PhysicalAddress) {
-    let start = PageParamA::linear_virt_to_phys(VirtualAddress(kernel_end as usize));
+    let start = PageParamA::linear_kvirt_to_phys(VirtualAddress(kernel_end as usize));
     let end = consts::MEMORY_END_ADDRESS;
     (start, end)
 }
@@ -41,8 +41,8 @@ pub fn kernel_segments() -> Vec<Segment> {
     vec![
         // mmio device segment, rw-
         Segment {
-            addr_range: PageParamA::linear_phys_to_virt(consts::DEVICE_START_ADDRESS)
-                ..PageParamA::linear_phys_to_virt(consts::DEVICE_END_ADDRESS),
+            addr_range: PageParamA::linear_phys_to_kvirt(consts::DEVICE_START_ADDRESS)
+                ..PageParamA::linear_phys_to_kvirt(consts::DEVICE_END_ADDRESS),
             flags: PageParamA::flag_set_kernel(
                 PageParamA::FLAG_PTE_READABLE | PageParamA::FLAG_PTE_WRITEABLE,
             ),
@@ -81,7 +81,7 @@ pub fn kernel_segments() -> Vec<Segment> {
         // remaining memory space，rw-
         Segment {
             addr_range: VirtualAddress(kernel_end as usize)
-                ..PageParamA::linear_phys_to_virt(consts::MEMORY_END_ADDRESS),
+                ..PageParamA::linear_phys_to_kvirt(consts::MEMORY_END_ADDRESS),
             flags: PageParamA::flag_set_kernel(
                 PageParamA::FLAG_PTE_READABLE | PageParamA::FLAG_PTE_WRITEABLE,
             ),

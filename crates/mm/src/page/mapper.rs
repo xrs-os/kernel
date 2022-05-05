@@ -72,7 +72,7 @@ where
     ) -> Result<FlushGuard<Param>> {
         let frame = self.allocator.alloc().ok_or(Error::NoSpace)?;
         let flush_guard = self.map(page, &frame, flags)?;
-        let addr = Param::linear_phys_to_virt(frame.start());
+        let addr = Param::linear_phys_to_kvirt(frame.start());
         ptr::copy(init_data.as_ptr(), addr.0 as *mut u8, init_data.len());
         Ok(flush_guard)
     }

@@ -35,8 +35,8 @@ impl<Param: PageParam> PageTable<Param> {
     /// # Safety
     /// Get the specified page table entry
     pub unsafe fn get_entry_unchecked(&self, idx: usize) -> PageTableEntry<Param> {
-        let pte_virt_addr = self.entry_virt_unchecked(idx);
-        PageTableEntry::new(pte_virt_addr.0 as *mut usize)
+        let pte_kvirt_addr = self.entry_kvirt_unchecked(idx);
+        PageTableEntry::new(pte_kvirt_addr.0 as *mut usize)
     }
 
     pub fn free<MutexType, A>(&mut self, allocator: &LockedAllocator<MutexType, A>)
@@ -44,12 +44,11 @@ impl<Param: PageParam> PageTable<Param> {
         MutexType: lock_api::RawMutex,
         A: Allocator,
     {
-        unsafe { self.entry_iter() }.for_each(|mut pte| {
+        unsafe { self.entry_iter() }.for_each(|(_, mut pte)| {
             pte.free(allocator);
         });
         allocator.dealloc(&self.frame);
     }
-
     pub fn borrow_memory<MutexType, A>(
         &self,
         allocator: &LockedAllocator<MutexType, A>,
@@ -60,27 +59,27 @@ impl<Param: PageParam> PageTable<Param> {
     {
         let target_frame = allocator.alloc().ok_or(Error::NoSpace)?;
 
-        for (idx, pte) in unsafe { self.entry_iter() }.enumerate() {
+        for (idx, pte) in unsafe { self.entry_iter() } {
             let target_pte_addr =
-                Param::linear_phys_to_virt(target_frame.start().add(idx * Param::PAGE_ENTRY_SIZE));
+                Param::linear_phys_to_kvirt(target_frame.start().add(idx * Param::PAGE_ENTRY_SIZE));
             pte.borrow_memory(PageTableEntry::new(target_pte_addr.as_mut_ptr()), allocator)?;
         }
 
         Ok(Self::new(target_frame))
     }
 
-    unsafe fn entry_iter(&self) -> impl Iterator<Item = PageTableEntry<Param>> + '_ {
+    unsafe fn entry_iter(&self) -> impl Iterator<Item = (usize, PageTableEntry<Param>)> + '_ {
         (0..Param::PTE_COUNT)
-            .map(move |idx| self.get_entry_unchecked(idx))
-            .filter(PageTableEntry::is_valid)
+            .map(move |idx| (idx, self.get_entry_unchecked(idx)))
+            .filter(|(_, pte)| pte.is_valid())
     }
 
-    // Get the virtual address of the specified page table entry
+    // Get the kernel virtual address of the specified page table entry
     #[inline(always)]
-    unsafe fn entry_virt_unchecked(&self, idx: usize) -> VirtualAddress {
-        // The virtual addresses of page tables
+    unsafe fn entry_kvirt_unchecked(&self, idx: usize) -> VirtualAddress {
+        // The kernel virtual addresses of page tables
         // and page table entries are linearly mapped from their physical addresses
-        Param::linear_phys_to_virt(self.frame.start().add(idx * Param::PAGE_ENTRY_SIZE))
+        Param::linear_phys_to_kvirt(self.frame.start().add(idx * Param::PAGE_ENTRY_SIZE))
     }
 }
 
@@ -161,7 +160,11 @@ impl<Param: PageParam> PageTableEntry<Param> {
             }
             Err(NextPageError::Invalid) => Err(Error::InvalidPageTable(self.data())),
             Err(NextPageError::NoNext) => {
-                target.set_data(Param::pte_borrow(self.data()));
+                if Param::pte_is_kernel(self.data()) {
+                    target.set_data(self.data());
+                } else {
+                    target.set_data(Param::pte_borrow(self.data()));
+                };
                 Ok(())
             }
         }

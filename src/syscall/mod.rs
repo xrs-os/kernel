@@ -129,7 +129,11 @@ pub async fn syscall(thread: &Arc<Thread>) {
 
     match res {
         Ok(ret) => thread.inner.write().context.set_syscall_ret(ret),
-        Err(_) => todo!(),
+        Err(err) => thread
+            .inner
+            .write()
+            .context
+            .set_syscall_ret((-(err as isize)) as usize),
     }
 }
 

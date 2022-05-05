@@ -9,6 +9,6 @@ pub fn init() {
 pub fn init_plic(node: &device_tree::Node) {
     let addr = node.prop_u64("reg").unwrap() as usize;
     let _phandle = node.prop_u32("phandle").unwrap();
-    let plic_base_addr = PageParamA::linear_phys_to_virt(PhysicalAddress(addr));
+    let plic_base_addr = PageParamA::linear_phys_to_kvirt(PhysicalAddress(addr));
     arch::plic::init(plic_base_addr, cpu::cpu_id());
 }

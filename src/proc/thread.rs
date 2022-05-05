@@ -8,7 +8,7 @@ use core::{
     task::{ready, Context, Poll, Waker},
 };
 
-use alloc::{boxed::Box, string::String, sync::Arc};
+use alloc::{boxed::Box, fmt, string::String, sync::Arc};
 use mm::{
     arch::page::PageParam as PageParamA,
     memory::{MapType, Segment},
@@ -224,6 +224,20 @@ enum ThreadFutureState {
     Exit,
 }
 
+impl fmt::Display for ThreadFutureState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ThreadFutureState::RunUser => "RunUser",
+                ThreadFutureState::Syscall(_) => "Syscall(_)",
+                ThreadFutureState::Exit => "Exit",
+            }
+        )
+    }
+}
+
 #[pin_project]
 pub struct ThreadFuture {
     thread: Arc<Thread>,
@@ -273,13 +287,18 @@ impl Future for ThreadFuture {
             }
         }
         drop(thread_inner);
+        crate::println!("thread poll: {:?}, state: {}", this.thread.id(), this.state);
         loop {
             *this.state = match this.state {
                 ThreadFutureState::RunUser => {
                     // TODO: No need to reactivate if the current page table is this process
                     this.thread.proc().memory.read().activate();
                     let mut thread_ctx = this.thread.inner.write().context.clone();
+                    crate::println!("thread poll run_user1: {:?}", this.thread.id());
+
                     let trap = unsafe { Box::from_raw(thread_ctx.run_user()) };
+                    crate::println!("thread poll run_user2: {:?}", this.thread.id());
+
                     {
                         let mut thread_inner = this.thread.inner.write();
                         thread_inner.context = thread_ctx;

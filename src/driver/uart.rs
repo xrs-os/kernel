@@ -28,7 +28,7 @@ pub fn init_uart(node: &device_tree::Node) {
                     crate::fs::tty().push(getchar());
                 }),
             );
-            let uart_base = PageParamA::linear_phys_to_virt(PhysicalAddress(addr));
+            let uart_base = PageParamA::linear_phys_to_kvirt(PhysicalAddress(addr));
             ptr::write_volatile(uart_base.add(UART_INT_EN_OFFSET).as_mut_ptr(), 0x01);
             ptr::write_volatile(uart_base.add(UART_MODEM_CONTROL_OFFSET).as_mut_ptr(), 0x0b);
         }

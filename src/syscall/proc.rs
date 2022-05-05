@@ -15,9 +15,8 @@ pub async fn sys_fork(thread: &Arc<Thread>) -> Result {
     match thread.fork(thread.inner.read().fork()).await {
         Ok(new_thread) => {
             let new_thread_id = *new_thread.id() as usize;
-            crate::println!("spwan1: {}", new_thread_id);
+            // TODO handle spwan result
             spawn(thread_future(Arc::new(new_thread))).ok_or(Error::EAGAIN)?;
-            crate::println!("spwan2: {}", new_thread_id);
             Ok(new_thread_id)
         }
         Err(e) => {

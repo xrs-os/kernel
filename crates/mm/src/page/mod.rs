@@ -81,6 +81,15 @@ pub trait PageParam {
     }
 
     #[inline(always)]
+    fn pte_is_kernel(pte: usize) -> bool;
+
+    #[inline(always)]
+    fn pte_is_user(pte: usize) -> bool {
+        !Self::pte_is_kernel(pte)
+    }
+
+
+    #[inline(always)]
     fn pte_set_invalid(pte: usize) -> usize {
         pte & (!Self::FLAG_PTE_VALID)
     }
@@ -98,13 +107,13 @@ pub trait PageParam {
         pte & (!Self::FLAG_PTE_WRITEABLE)
     }
 
-    // Linear mapping of physical addresses to virtual addresses
-    fn linear_phys_to_virt(pa: PhysicalAddress) -> VirtualAddress {
+    // Linear mapping of physical addresses to kernel virtual addresses
+    fn linear_phys_to_kvirt(pa: PhysicalAddress) -> VirtualAddress {
         VirtualAddress(pa.0 + Self::LINEAR_MAPPING_PHYS_OFFSET)
     }
 
-    // Virtual address to physical address for linear mapping
-    fn linear_virt_to_phys(va: VirtualAddress) -> PhysicalAddress {
+    // Kernel virtual address to physical address for linear mapping
+    fn linear_kvirt_to_phys(va: VirtualAddress) -> PhysicalAddress {
         PhysicalAddress(va.0 - Self::LINEAR_MAPPING_PHYS_OFFSET)
     }
 }
