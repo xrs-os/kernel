@@ -41,6 +41,7 @@ mod fs;
 mod sleeplock;
 mod syscall;
 mod time;
+mod timer;
 
 extern "C" {
     fn _bootstack();
@@ -51,6 +52,7 @@ extern "C" {
 fn kmain(_hartid: usize, dtb_pa: usize) {
     console::init();
     heap::init();
+    timer::init();
     interruptA::init();
     cpu::init();
     mm::init();
@@ -65,11 +67,5 @@ fn kmain(_hartid: usize, dtb_pa: usize) {
             // it is necessary to turn on interrupts to allow external interrupts so that wake can be called
             interruptA::enable_and_wfi();
         };
-    }
-}
-
-mod handler {
-    pub fn on_timer(kernel: bool) {
-        // println!("timer tiggered. {}", if kernel { "kernel" } else { "user" });
     }
 }

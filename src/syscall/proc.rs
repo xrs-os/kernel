@@ -7,6 +7,8 @@ use crate::{
         executor::spawn,
         thread::{thread_future, Thread},
     },
+    time::Timespec,
+    timer,
 };
 
 use super::{Error, Result};
@@ -51,6 +53,13 @@ pub async fn sys_execve(
         .await
         .map_err::<Error, _>(Into::into)?;
 
+    Ok(0)
+}
+
+pub async fn sys_nanosleep(time: Timespec) -> Result {
+    if !time.is_zero() {
+        timer::sleep(time.to_duration()).await;
+    }
     Ok(0)
 }
 

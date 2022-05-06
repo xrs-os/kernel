@@ -80,7 +80,6 @@ pub trait PageParam {
         (pte & Self::FLAG_PTE_VALID) == Self::FLAG_PTE_VALID
     }
 
-    #[inline(always)]
     fn pte_is_kernel(pte: usize) -> bool;
 
     #[inline(always)]

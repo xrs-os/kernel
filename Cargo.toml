@@ -44,6 +44,7 @@ array-init = "2"
 xmas-elf = "0.8"
 device_tree = { git = "https://github.com/rcore-os/device_tree-rs" }
 volatile = "0.4"
+naive-timer = { git = "https://github.com/rcore-os/naive-timer.git" }
 
 [dev-dependencies]
 # tokio-test = "0.4"

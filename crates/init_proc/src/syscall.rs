@@ -6,6 +6,7 @@ enum SyscallNum {
     Read = 63,
     Write = 64,
     Exit = 93,
+    NanoSleep = 101,
     Clone = 220,
 }
 
@@ -99,6 +100,18 @@ pub fn sys_write(fd: isize, buf: &[u8]) -> usize {
             buf.len(),
         )
     }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Timespec {
+    pub sec: i64,
+    pub nsec: i32,
+}
+
+#[allow(dead_code)]
+pub fn sys_nanosleep(time: Timespec) -> usize {
+    unsafe { syscall1(SyscallNum::NanoSleep, &time as *const Timespec as usize) }
 }
 
 #[allow(dead_code)]

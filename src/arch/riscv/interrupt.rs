@@ -1,4 +1,5 @@
 use core::arch::{asm, global_asm};
+use core::time::Duration;
 
 #[cfg(target_arch = "riscv32")]
 global_asm!(".equ XLENB, 4");
@@ -159,7 +160,7 @@ extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
 
     Box::into_raw(Box::new(match scause.cause() {
         scause::Trap::Interrupt(scause::Interrupt::SupervisorTimer) => {
-            crate::handler::on_timer(false);
+            crate::timer::on_timer(false);
             set_next_timer_interrupt();
             Trap::Timer
         }
@@ -168,7 +169,9 @@ extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
             Trap::Interrupt
         }
         scause::Trap::Exception(scause::Exception::UserEnvCall) => Trap::Syscall,
-        scause::Trap::Exception(scause::Exception::StorePageFault) => Trap::PageFault(stval::read().into()),
+        scause::Trap::Exception(scause::Exception::StorePageFault) => {
+            Trap::PageFault(stval::read().into())
+        }
         _ => {
             crate::println!("ucause: {:?}", scause.cause());
             crate::println!("ustval: 0x{:x}", stval::read());
@@ -187,7 +190,7 @@ extern "C" fn kernel_trap_handler(_ctx: &mut Context) {
     // crate::println!("kernal sepc: 0x{:x}", riscv::register::sepc::read());
     match scause.cause() {
         scause::Trap::Interrupt(scause::Interrupt::SupervisorTimer) => {
-            crate::handler::on_timer(true);
+            crate::timer::on_timer(true);
             set_next_timer_interrupt();
         }
         scause::Trap::Interrupt(scause::Interrupt::SupervisorExternal) => external_handler(),
@@ -213,26 +216,34 @@ unsafe fn init_timer() {
     set_next_timer_interrupt();
 }
 
-fn set_next_timer_interrupt() {
-    #[cfg(target_arch = "riscv64")]
-    pub fn get_cycle() -> u64 {
-        use riscv::register::time;
-        time::read() as u64
-    }
+#[cfg(target_arch = "riscv64")]
+pub fn get_cycle() -> u64 {
+    use riscv::register::time;
+    time::read() as u64
+}
 
-    #[cfg(target_arch = "riscv32")]
-    pub fn get_cycle() -> u64 {
-        use riscv::register::{time, timeh};
-        loop {
-            let hi = timeh::read();
-            let lo = time::read();
-            let tmp = timeh::read();
-            if hi == tmp {
-                return ((hi as u64) << 32) | (lo as u64);
-            }
+#[cfg(target_arch = "riscv32")]
+pub fn get_cycle() -> u64 {
+    use riscv::register::{time, timeh};
+    loop {
+        let hi = timeh::read();
+        let lo = time::read();
+        let tmp = timeh::read();
+        if hi == tmp {
+            return ((hi as u64) << 32) | (lo as u64);
         }
     }
-    sbi::set_timer(get_cycle() + 9650000/3);
+}
+
+pub fn timer_now() -> Duration {
+    let time = get_cycle();
+    Duration::from_nanos(time * 100)
+}
+
+fn set_next_timer_interrupt() {
+    // 10Hz @ QEMU
+    let timebase = 1000000;
+    sbi::set_timer(get_cycle() + timebase);
 }
 
 /// Enable external interrupt

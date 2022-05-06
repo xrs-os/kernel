@@ -1,4 +1,4 @@
-use crate::proc::thread::Thread;
+use crate::{proc::thread::Thread, time::Timespec};
 use alloc::sync::Arc;
 use core::{mem, ptr, slice};
 
@@ -13,6 +13,8 @@ use fs::{
 };
 use proc::{sys_exit, sys_fork};
 use syscall_table::*;
+
+use self::proc::sys_nanosleep;
 
 pub type Result = core::result::Result<usize, Error>;
 
@@ -124,6 +126,10 @@ pub async fn syscall(thread: &Arc<Thread>) {
         },
         SYS_EXIT => sys_exit(thread, syscall_args[0] as isize),
         SYS_CLONE => sys_fork(thread).await,
+        SYS_NANOSLEEP => {
+            let time_ptr = syscall_args[0] as *const Timespec;
+            sys_nanosleep(unsafe { ptr::read(time_ptr) }).await
+        }
         _ => Err(Error::ENOSYS),
     };
 

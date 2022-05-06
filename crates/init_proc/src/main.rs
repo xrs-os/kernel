@@ -5,8 +5,7 @@
 #[macro_use]
 extern crate alloc;
 
-use alloc::format;
-use syscall::{sys_clone, sys_openat, sys_write};
+use syscall::{sys_clone, sys_nanosleep, sys_openat, sys_write, Timespec};
 
 mod allocator;
 mod lang_items;
@@ -23,18 +22,25 @@ pub fn main() {
         tty0,
         r#"
     ██      ██   ███████    ████████       ███████    ████████
-    ░░██   ██   ██░░░░░██  ██░░░░░░       ░██░░░░██  ██░░░░░░ 
-     ░░██ ██   ██     ░░██░██             ░██   ░██ ░██       
+    ░░██   ██   ██░░░░░██  ██░░░░░░       ░██░░░░██  ██░░░░░░
+     ░░██ ██   ██     ░░██░██             ░██   ░██ ░██
       ░░███   ░██      ░██░█████████ █████░███████  ░█████████
        ██░██  ░██      ░██░░░░░░░░██░░░░░ ░██░░░██  ░░░░░░░░██
       ██ ░░██ ░░██     ██        ░██      ░██  ░░██        ░██
-     ██   ░░██ ░░███████   ████████       ░██   ░░██ ████████ 
-    ░░     ░░   ░░░░░░░   ░░░░░░░░        ░░     ░░ ░░░░░░░░  
+     ██   ░░██ ░░███████   ████████       ░██   ░░██ ████████
+    ░░     ░░   ░░░░░░░   ░░░░░░░░        ░░     ░░ ░░░░░░░░
 "#
         .as_bytes(),
     );
 
     let pid = sys_clone();
-    sys_write(tty0, format!("pid: {}\n", pid).as_bytes());
-    loop {}
+
+    loop {
+        sys_nanosleep(Timespec { sec: 1, nsec: 0 });
+        if pid == 0 {
+            sys_write(tty0, "subproc\n".as_bytes());
+        } else {
+            sys_write(tty0, "parent proc\n".as_bytes());
+        }
+    }
 }

@@ -321,6 +321,7 @@ dependencies = [
  "log",
  "lru",
  "mm",
+ "naive-timer",
  "naive_fs",
  "num_enum",
  "pin-project",
@@ -407,6 +408,11 @@ dependencies = [
  "lock_api",
  "riscv",
 ]
+
+[[package]]
+name = "naive-timer"
+version = "0.2.0"
+source = "git+https://github.com/rcore-os/naive-timer.git#72a976fe3bd59854610bad67885c36ae8ffb42f4"
 
 [[package]]
 name = "naive_fs"
