@@ -34,6 +34,11 @@ pub trait Addr: Sized {
         self.inner() & ((1 << align_shift) - 1) == 0
     }
 
+    fn align_down_to_shift(&self, align_shift: usize) -> Self {
+        let mask = !((1 << align_shift) - 1);
+        Self::new(self.inner() & mask)
+    }
+
     fn align_down_to(&self, to_size: usize) -> Self {
         Self::new(self.inner() / to_size * to_size)
     }

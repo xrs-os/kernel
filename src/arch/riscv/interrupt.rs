@@ -156,10 +156,7 @@ pub unsafe fn wfi() {
 #[export_name = "_user_trap_handler"]
 extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
     let scause = scause::read();
-    let _stval = stval::read();
-    // crate::println!("ucause: {:?}", scause.cause());
-    // crate::println!("ustval: 0x{:x}", _stval);
-    // crate::println!("usepc: 0x{:x}", riscv::register::sepc::read());
+
     Box::into_raw(Box::new(match scause.cause() {
         scause::Trap::Interrupt(scause::Interrupt::SupervisorTimer) => {
             crate::handler::on_timer(false);
@@ -171,9 +168,10 @@ extern "C" fn user_trap_handler(_tf: &mut Context) -> *mut Trap {
             Trap::Interrupt
         }
         scause::Trap::Exception(scause::Exception::UserEnvCall) => Trap::Syscall,
+        scause::Trap::Exception(scause::Exception::StorePageFault) => Trap::PageFault(stval::read().into()),
         _ => {
             crate::println!("ucause: {:?}", scause.cause());
-            crate::println!("ustval: 0x{:x}", _stval);
+            crate::println!("ustval: 0x{:x}", stval::read());
             crate::println!("usepc: 0x{:x}", riscv::register::sepc::read());
             Trap::Other
         }
@@ -234,7 +232,7 @@ fn set_next_timer_interrupt() {
             }
         }
     }
-    sbi::set_timer(get_cycle() + 9650000);
+    sbi::set_timer(get_cycle() + 9650000/3);
 }
 
 /// Enable external interrupt

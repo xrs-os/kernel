@@ -287,17 +287,17 @@ impl Future for ThreadFuture {
             }
         }
         drop(thread_inner);
-        crate::println!("thread poll: {:?}, state: {}", this.thread.id(), this.state);
+        // crate::println!("thread poll: {:?}, state: {}", this.thread.id(), this.state);
         loop {
             *this.state = match this.state {
                 ThreadFutureState::RunUser => {
                     // TODO: No need to reactivate if the current page table is this process
                     this.thread.proc().memory.read().activate();
                     let mut thread_ctx = this.thread.inner.write().context.clone();
-                    crate::println!("thread poll run_user1: {:?}", this.thread.id());
+                    // crate::println!("thread poll run_user1: {:?}", this.thread.id());
 
                     let trap = unsafe { Box::from_raw(thread_ctx.run_user()) };
-                    crate::println!("thread poll run_user2: {:?}", this.thread.id());
+                    // crate::println!("thread poll run_user2: {:?}", this.thread.id());
 
                     {
                         let mut thread_inner = this.thread.inner.write();
@@ -305,7 +305,11 @@ impl Future for ThreadFuture {
                         thread_inner.state = State::INTERRUPTIBLE;
                     }
                     match *trap {
-                        Trap::PageFault(_) => todo!(),
+                        Trap::PageFault(vaddr) => {
+                            // TODO handle result
+                            this.thread.proc().memory.write().handle_page_fault(vaddr);
+                            ThreadFutureState::RunUser
+                        }
                         Trap::Syscall => ThreadFutureState::Syscall(unsafe {
                             remove_future_lifetime(Box::new(syscall(this.thread)))
                         }),

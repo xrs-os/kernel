@@ -16,11 +16,11 @@ const AT_FDCWD: isize = -100;
 
 #[allow(clippy::empty_loop)]
 pub fn main() {
-    let _tty0 = sys_openat(AT_FDCWD, b"/dev/tty\0", 2, 0);
-    let _tty1 = sys_openat(AT_FDCWD, b"/dev/tty\0", 2, 0);
+    let tty0 = sys_openat(AT_FDCWD, b"/dev/tty\0", 2, 0);
+    // let _tty1 = sys_openat(AT_FDCWD, b"/dev/tty\0", 2, 0);
 
     sys_write(
-        _tty0,
+        tty0,
         r#"
     ██      ██   ███████    ████████       ███████    ████████
     ░░██   ██   ██░░░░░██  ██░░░░░░       ░██░░░░██  ██░░░░░░ 
@@ -35,6 +35,6 @@ pub fn main() {
     );
 
     let pid = sys_clone();
-    sys_write(_tty0, format!("pid: {}\n", pid).as_bytes());
+    sys_write(tty0, format!("pid: {}\n", pid).as_bytes());
     loop {}
 }

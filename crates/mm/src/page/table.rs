@@ -2,7 +2,7 @@ use core::{marker::PhantomData, option::Option};
 
 use crate::{frame::LockedAllocator, Addr, Error, Result};
 
-use super::{frame::Allocator, Frame, PageParam, PhysicalAddress, VirtualAddress};
+use super::{frame::Allocator, Flag, Frame, PageParam, PhysicalAddress, VirtualAddress};
 
 pub enum NextPageError {
     NoNext,
@@ -163,7 +163,7 @@ impl<Param: PageParam> PageTableEntry<Param> {
                 if Param::pte_is_kernel(self.data()) {
                     target.set_data(self.data());
                 } else {
-                    target.set_data(Param::pte_borrow(self.data()));
+                    target.set_data(Param::pte_set_unwritable(self.data()));
                 };
                 Ok(())
             }
@@ -174,11 +174,15 @@ impl<Param: PageParam> PageTableEntry<Param> {
         Param::pte_is_valid(self.data())
     }
 
-    fn set_invalid(&mut self) {
+    pub fn flags(&self) -> Flag {
+        Param::pte_flags(self.data())
+    }
+
+    pub fn set_invalid(&mut self) {
         self.set_data(Param::pte_set_invalid(self.data()))
     }
 
-    fn data(&self) -> usize {
+    pub fn data(&self) -> usize {
         unsafe { *self.data }
     }
 

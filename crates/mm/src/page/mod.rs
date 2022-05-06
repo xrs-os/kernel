@@ -88,7 +88,6 @@ pub trait PageParam {
         !Self::pte_is_kernel(pte)
     }
 
-
     #[inline(always)]
     fn pte_set_invalid(pte: usize) -> usize {
         pte & (!Self::FLAG_PTE_VALID)
@@ -103,9 +102,17 @@ pub trait PageParam {
     fn pte_idxs(va: VirtualAddress) -> [usize; Self::PAGE_LEVELS];
 
     /// Copy `pte` and make it unwritable
-    fn pte_borrow(pte: usize) -> usize {
+    fn pte_set_unwritable(pte: usize) -> usize {
         pte & (!Self::FLAG_PTE_WRITEABLE)
     }
+
+    /// Copy `pte` and make it writable
+    fn pte_set_writable(pte: usize) -> usize {
+        pte | Self::FLAG_PTE_WRITEABLE
+    }
+
+    // Return pte flags
+    fn pte_flags(pte: usize) -> Flag;
 
     // Linear mapping of physical addresses to kernel virtual addresses
     fn linear_phys_to_kvirt(pa: PhysicalAddress) -> VirtualAddress {

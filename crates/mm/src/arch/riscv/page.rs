@@ -91,4 +91,9 @@ impl crate::page::PageParam for PageParamSv39 {
             (va.0 & 0x1F_F000) >> 12,      // level 3
         ]
     }
+
+    #[inline(always)]
+    fn pte_flags(pte: usize) -> Flag {
+        pte & 0x3FF
+    }
 }

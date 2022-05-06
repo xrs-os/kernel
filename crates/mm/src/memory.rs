@@ -1,3 +1,5 @@
+use crate::page::flush::FlushGuard;
+
 use super::{
     frame::Allocator,
     page::{flush::FlushAllGuard, mapper::PageMapper, Flag, PageParam},
@@ -52,6 +54,10 @@ where
             user_segments: self.user_segments.clone(),
             page_mapper: new_page_mapper,
         })
+    }
+
+    pub fn handle_page_fault(&mut self, vaddr: VirtualAddress) -> Result<FlushGuard<Param>> {
+        self.page_mapper.handle_page_fault(vaddr)
     }
 
     pub fn add_kernel_segment(&mut self, segment: Segment) -> Result<FlushAllGuard<Param>> {
