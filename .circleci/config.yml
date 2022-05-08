@@ -17,8 +17,6 @@ jobs:
       docker_layer_caching: true
     steps:
       - checkout
-      - setup_remote_docker:
-          docker_layer_caching: true
       - run: |
           DOCKER_BUILDKIT=1 docker build --target dist -t xrs-os-dist .
           docker run --name xrs-os-dist-container xrs-os-dist
