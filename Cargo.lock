@@ -179,7 +179,7 @@ version = "0.1.0"
 [[package]]
 name = "device_tree"
 version = "1.0.3"
-source = "git+https://github.com/rcore-os/device_tree-rs#4e8144baa29c12351789ef5ca76f6a46cc042160"
+source = "git+https://github.com/rcore-os/device_tree-rs?rev=2f2e55fb5238466747fef49d9ce0f59b2e808154#2f2e55fb5238466747fef49d9ce0f59b2e808154"
 
 [[package]]
 name = "env_logger"
@@ -412,7 +412,7 @@ dependencies = [
 [[package]]
 name = "naive-timer"
 version = "0.2.0"
-source = "git+https://github.com/rcore-os/naive-timer.git#72a976fe3bd59854610bad67885c36ae8ffb42f4"
+source = "git+https://github.com/rcore-os/naive-timer?rev=72a976fe3bd59854610bad67885c36ae8ffb42f4#72a976fe3bd59854610bad67885c36ae8ffb42f4"
 
 [[package]]
 name = "naive_fs"
@@ -746,7 +746,7 @@ checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
 [[package]]
 name = "virtio-drivers"
 version = "0.1.0"
-source = "git+https://github.com/xrs-os/virtio-drivers.git?branch=main#1a628efcccbf7fd45b0e24e173b3b1807aa8ff97"
+source = "git+https://github.com/xrs-os/virtio-drivers?branch=main#1a628efcccbf7fd45b0e24e173b3b1807aa8ff97"
 dependencies = [
  "bitflags",
  "lock_api",

@@ -35,16 +35,16 @@ sleeplock = { path = "crates/sleeplock" }
 future_ext = { path = "crates/future_ext" }
 # [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
 riscv = "0.6"
-virtio-drivers = { git = "https://github.com/xrs-os/virtio-drivers.git", branch = "main" }
+virtio-drivers = { git = "https://github.com/xrs-os/virtio-drivers", branch = "main" }
 log = "0.4"
 mm = { path = "crates/mm" }
 executor = { path = "crates/executor", features = ["fifo"] }
 num_enum = { path = "crates/num_enum" }
 array-init = "2"
 xmas-elf = "0.8"
-device_tree = { git = "https://github.com/rcore-os/device_tree-rs" }
+device_tree = { git = "https://github.com/rcore-os/device_tree-rs", rev = "2f2e55fb5238466747fef49d9ce0f59b2e808154" }
 volatile = "0.4"
-naive-timer = { git = "https://github.com/rcore-os/naive-timer.git" }
+naive-timer = { git = "https://github.com/rcore-os/naive-timer", rev = "72a976fe3bd59854610bad67885c36ae8ffb42f4" }
 
 [dev-dependencies]
 # tokio-test = "0.4"

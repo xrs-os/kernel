@@ -1,6 +1,6 @@
+.git
 /build
 /target
-/vendor
 .vscode
 .DS_Store
 .idea

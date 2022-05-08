@@ -1,0 +1,51 @@
+workflows:
+  deploy:
+    jobs:
+      - build
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: main
+
+version: 2.1
+jobs:
+  build:
+    machine:
+      image: ubuntu-2004:current
+      docker_layer_caching: true
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: |
+          DOCKER_BUILDKIT=1 docker build --target dist -t xrs-os-dist .
+          docker run --name xrs-os-dist-container xrs-os-dist
+          docker cp xrs-os-dist-container:/dist/initfs.img .
+          docker cp xrs-os-dist-container:/dist/fw_dynamic.elf .
+      - persist_to_workspace:
+          root: dist
+          paths:
+            - initfs.img
+            - fw_dynamic.elf
+
+  deploy:
+    docker:
+      - image: node:8
+    steps:
+      - attach_workspace:
+          at: dist
+      - run:
+          name: Install and configure dependencies
+          command: |
+            npm install -g --silent gh-pages@2.0.1
+            git config user.email "circleci"
+            git config user.name "circleci"
+      - run:
+          name: Deploy docs to gh-pages branch
+          command: gh-pages --dist dist/
+      - add_ssh_keys:
+          fingerprints:
+            - 7b:d8:91:2b:ea:03:a2:db:22:a1:f3:60:bc:54:13:96
+  
