@@ -19,7 +19,7 @@ jobs:
       - checkout
       - run: |
           DOCKER_BUILDKIT=1 docker build --target dist -t xrs-os-dist .
-          docker run --name xrs-os-dist-container xrs-os-dist
+          docker create --name xrs-os-dist-container xrs-os-dist
           docker cp xrs-os-dist-container:/dist/initfs.img .
           docker cp xrs-os-dist-container:/dist/fw_dynamic.elf .
       - persist_to_workspace:
