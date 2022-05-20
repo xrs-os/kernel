@@ -55,6 +55,7 @@ The linux kernel.
   - [x] Async Task
 
 - Filesystem
+  - [x] VFS
   - [x] NaiveFS (Like ext2, but simpler)
   - [ ] Fat
   - [ ] Ext2/3/4
